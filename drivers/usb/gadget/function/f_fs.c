@@ -3084,6 +3084,7 @@ static int _ffs_func_bind(struct usb_configuration *c,
 			ret = ss_len;
 			goto error;
 		}
+		func->function.ssp_descriptors = func->function.ss_descriptors;
 	} else {
 		ss_len = 0;
 	}
@@ -3492,6 +3493,7 @@ static void ffs_func_unbind(struct usb_configuration *c,
 	func->function.fs_descriptors = NULL;
 	func->function.hs_descriptors = NULL;
 	func->function.ss_descriptors = NULL;
+	func->function.ssp_descriptors = NULL;
 	func->interfaces_nums = NULL;
 
 	ffs_event_add(ffs, FUNCTIONFS_UNBIND);
