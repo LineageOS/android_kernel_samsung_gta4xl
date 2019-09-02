@@ -37,12 +37,12 @@ struct hall_drvdata {
 	u8 event_val;
 };
 
-static bool flip_cover;
+bool sec_flip_cover;
 
 static ssize_t hall_detect_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	if (flip_cover)
+	if (sec_flip_cover)
 		sprintf(buf, "OPEN\n");
 	else
 		sprintf(buf, "CLOSE\n");
@@ -81,9 +81,9 @@ static void flip_cover_work(struct work_struct *work)
 			second ? "open" : "close");
 
 	if (first == second) {
-		flip_cover = first;
+		sec_flip_cover = first;
 
-		input_report_switch(ddata->input, ddata->event_val, !flip_cover);
+		input_report_switch(ddata->input, ddata->event_val, !sec_flip_cover);
 		input_sync(ddata->input);
 	}
 }
@@ -101,9 +101,9 @@ static void flip_cover_work(struct work_struct *work)
 	pr_info("[keys] %s flip_status : %d (%s)\n", __func__, first,
 			first ? "open" : "close");
 
-	flip_cover = first;
+	sec_flip_cover = first;
 
-	input_report_switch(ddata->input, ddata->event_val, !flip_cover);
+	input_report_switch(ddata->input, ddata->event_val, !sec_flip_cover);
 	input_sync(ddata->input);
 #else
 	first = !gpio_get_value(ddata->pdata->gpio_flip_cover_key1)
@@ -112,7 +112,7 @@ static void flip_cover_work(struct work_struct *work)
 			gpio_get_value(ddata->pdata->gpio_flip_cover_key1),
 			gpio_get_value(ddata->pdata->gpio_flip_cover_key2),
 			first);
-	if (flip_cover != first) {
+	if (sec_flip_cover != first) {
 		if (first) {
 			ddata->emulated_hall_ic_status =
 				!ddata->emulated_hall_ic_status;
@@ -122,7 +122,7 @@ static void flip_cover_work(struct work_struct *work)
 					ddata->emulated_hall_ic_status);
 			input_sync(ddata->input);
 		}
-		flip_cover = first;
+		sec_flip_cover = first;
 	}
 	schedule_delayed_work(&ddata->flip_cover_dwork, msecs_to_jiffies(1000));
 #endif
@@ -191,9 +191,9 @@ static void init_hall_ic_irq(struct input_dev *input)
 	int irq = ddata->pdata->irq_flip_cover;
 
 #if !defined(EMUALTE_HALL_IC)
-	flip_cover = gpio_get_value(ddata->pdata->gpio_flip_cover);
+	sec_flip_cover = gpio_get_value(ddata->pdata->gpio_flip_cover);
 #else
-	flip_cover = 0;
+	sec_flip_cover = 0;
 #endif
 
 	INIT_DELAYED_WORK(&ddata->flip_cover_dwork, flip_cover_work);
