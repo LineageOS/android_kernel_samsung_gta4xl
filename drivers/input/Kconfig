@@ -205,10 +205,6 @@ config TOUCHSCREEN_DUMP_MODE
 
 	  If unsure, say N.
 
-config SEC_DEBUG_TSP_LOG
-	tristate "Support for tsp_msg"
-	default n
-
 config SEC_AUTO_INPUT
 	tristate "Samsung auto input"
 	depends on !SAMSUNG_PRODUCT_SHIP
