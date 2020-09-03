@@ -195,10 +195,6 @@ obj-$(CONFIG_VISION_SUPPORT)    += vision/
 
 obj-$(CONFIG_SEC_EXT)           += samsung/
 
-# FIVE TEE driver
-obj-$(CONFIG_FIVE_TEE_DRIVER)	+= security/samsung/five_tee_driver/
-obj-$(CONFIG_ICD)		+= security/samsung/icdrv/
-
 # Sensor Hub
 obj-$(CONFIG_SENSORS_SSP) += sensorhub/
 
