@@ -30,6 +30,10 @@
 #include <crypto/skcipher.h>
 #include "fscrypt_private.h"
 
+#ifdef CONFIG_FSCRYPT_SDP
+#include "sdp/sdp_crypto.h"
+#endif
+
 static unsigned int num_prealloc_crypto_pages = 32;
 static unsigned int num_prealloc_crypto_ctxs = 128;
 
@@ -104,6 +108,8 @@ struct fscrypt_ctx *fscrypt_get_ctx(const struct inode *inode, gfp_t gfp_flags)
 	if (ci == NULL)
 		return ERR_PTR(-ENOKEY);
 
+	BUG_ON(__fscrypt_inline_encrypted(inode));
+
 	/*
 	 * We first try getting the ctx from a free list because in
 	 * the common case the ctx will have an allocated and
@@ -158,6 +164,9 @@ int fscrypt_do_page_crypto(const struct inode *inode, fscrypt_direction_t rw,
 	struct fscrypt_info *ci = inode->i_crypt_info;
 	struct crypto_skcipher *tfm = ci->ci_ctfm;
 	int res = 0;
+#ifdef CONFIG_FSCRYPT_SDP
+	sdp_fs_command_t *cmd = NULL;
+#endif
 
 	BUG_ON(len == 0);
 
@@ -186,6 +195,26 @@ int fscrypt_do_page_crypto(const struct inode *inode, fscrypt_direction_t rw,
 			    "%scryption failed for inode %lu, block %llu: %d",
 			    (rw == FS_DECRYPT ? "de" : "en"),
 			    inode->i_ino, lblk_num, res);
+#ifdef CONFIG_FSCRYPT_SDP
+		if (ci->ci_sdp_info) {
+			if (ci->ci_sdp_info->sdp_flags & SDP_DEK_IS_SENSITIVE) {
+				printk("Record audit log in case of a failure during en/decryption of sensitive file\n");
+				if (rw == FS_DECRYPT) {
+					cmd = sdp_fs_command_alloc(FSOP_AUDIT_FAIL_DECRYPT,
+					current->tgid, ci->ci_sdp_info->engine_id, -1, inode->i_ino, res,
+							GFP_KERNEL);
+				} else {
+					cmd = sdp_fs_command_alloc(FSOP_AUDIT_FAIL_ENCRYPT,
+					current->tgid, ci->ci_sdp_info->engine_id, -1, inode->i_ino, res,
+							GFP_KERNEL);
+				}
+				if (cmd) {
+					sdp_fs_request(cmd, NULL);
+					sdp_fs_command_free(cmd);
+				}
+			}
+		}
+#endif
 		return res;
 	}
 	return 0;
@@ -194,11 +223,22 @@ int fscrypt_do_page_crypto(const struct inode *inode, fscrypt_direction_t rw,
 struct page *fscrypt_alloc_bounce_page(struct fscrypt_ctx *ctx,
 				       gfp_t gfp_flags)
 {
-	ctx->w.bounce_page = mempool_alloc(fscrypt_bounce_page_pool, gfp_flags);
-	if (ctx->w.bounce_page == NULL)
+	void *pool = mempool_alloc(fscrypt_bounce_page_pool, gfp_flags);
+
+	if (pool == NULL)
 		return ERR_PTR(-ENOMEM);
-	ctx->flags |= FS_CTX_HAS_BOUNCE_BUFFER_FL;
-	return ctx->w.bounce_page;
+
+	if (ctx) {
+		ctx->w.bounce_page = pool;
+		ctx->flags |= FS_CTX_HAS_BOUNCE_BUFFER_FL;
+	}
+
+	return pool;
+}
+
+void fscrypt_free_bounce_page(void *pool)
+{
+	mempool_free(pool, fscrypt_bounce_page_pool);
 }
 
 /**
@@ -354,8 +394,18 @@ static int fscrypt_d_revalidate(struct dentry *dentry, unsigned int flags)
 	return 1;
 }
 
+#ifdef CONFIG_FSCRYPT_SDP
+static int fscrypt_sdp_d_delete(const struct dentry *dentry)
+{
+	return fscrypt_sdp_d_delete_wrapper(dentry);
+}
+#endif
+
 const struct dentry_operations fscrypt_d_ops = {
 	.d_revalidate = fscrypt_d_revalidate,
+#ifdef CONFIG_FSCRYPT_SDP
+	.d_delete     = fscrypt_sdp_d_delete,
+#endif
 };
 
 void fscrypt_restore_control_page(struct page *page)
@@ -473,7 +523,15 @@ static int __init fscrypt_init(void)
 	if (!fscrypt_info_cachep)
 		goto fail_free_ctx;
 
+#ifdef CONFIG_FSCRYPT_SDP
+	sdp_crypto_init();
+	if (!fscrypt_sdp_init_sdp_info_cachep())
+		goto fail_free_info;
+#endif
+
 	return 0;
+fail_free_info:
+	kmem_cache_destroy(fscrypt_info_cachep);
 
 fail_free_ctx:
 	kmem_cache_destroy(fscrypt_ctx_cachep);
@@ -495,6 +553,10 @@ static void __exit fscrypt_exit(void)
 		destroy_workqueue(fscrypt_read_workqueue);
 	kmem_cache_destroy(fscrypt_ctx_cachep);
 	kmem_cache_destroy(fscrypt_info_cachep);
+#ifdef CONFIG_FSCRYPT_SDP
+	sdp_crypto_exit();
+	fscrypt_sdp_release_sdp_info_cachep();
+#endif
 
 	fscrypt_essiv_cleanup();
 }

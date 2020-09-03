@@ -88,9 +88,9 @@ bool f2fs_available_free_memory(struct f2fs_sb_info *sbi, int type)
 				sizeof(struct extent_node)) >> PAGE_SHIFT;
 		res = mem_size < ((avail_ram * nm_i->ram_thresh / 100) >> 1);
 	} else if (type == INMEM_PAGES) {
-		/* it allows 20% / total_ram for inmemory pages */
+		/* it allows 50% / total_ram for inmemory pages */
 		mem_size = get_pages(sbi, F2FS_INMEM_PAGES);
-		res = mem_size < (val.totalram / 5);
+		res = mem_size < (val.totalram / 2);
 	} else {
 		if (!sbi->sb->s_bdi->wb.dirty_exceeded)
 			return true;
@@ -1374,6 +1374,10 @@ page_hit:
 			next_blkaddr_of_node(page));
 		err = -EINVAL;
 out_err:
+		if (PageUptodate(page)) {
+			print_block_data(sbi->sb, nid, page_address(page), 0, F2FS_BLKSIZE);
+			f2fs_bug_on(sbi, 1);
+		}
 		ClearPageUptodate(page);
 		f2fs_put_page(page, 1);
 		return ERR_PTR(err);
@@ -1507,6 +1511,8 @@ static int __write_node_page(struct page *page, bool atomic, bool *submitted,
 	};
 	unsigned int seq;
 
+	f2fs_cond_set_fua(&fio);
+
 	trace_f2fs_writepage(page, NODE);
 
 	if (unlikely(f2fs_cp_error(sbi)))
@@ -1515,7 +1521,8 @@ static int __write_node_page(struct page *page, bool atomic, bool *submitted,
 	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
 		goto redirty_out;
 
-	if (wbc->sync_mode == WB_SYNC_NONE &&
+	if (!is_sbi_flag_set(sbi, SBI_CP_DISABLED) &&
+			wbc->sync_mode == WB_SYNC_NONE &&
 			IS_DNODE(page) && is_cold_node(page))
 		goto redirty_out;
 
@@ -1851,7 +1858,8 @@ continue_unlock:
 	}
 
 	if (step < 2) {
-		if (wbc->sync_mode == WB_SYNC_NONE && step == 1)
+		if (!is_sbi_flag_set(sbi, SBI_CP_DISABLED) &&
+				wbc->sync_mode == WB_SYNC_NONE && step == 1)
 			goto out;
 		step++;
 		goto next_step;
@@ -1917,6 +1925,12 @@ static int f2fs_write_node_pages(struct address_space *mapping,
 
 	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
 		goto skip_write;
+
+	/* W/A - prevent panic while shutdown */
+	if (unlikely(ignore_fs_panic)) {
+		//pr_err("%s: Ignore panic\n", __func__);
+		return -EIO;
+	}
 
 	/* balancing f2fs's metadata in background */
 	f2fs_balance_fs_bg(sbi);
@@ -2173,8 +2187,11 @@ static int scan_nat_page(struct f2fs_sb_info *sbi,
 
 		blk_addr = le32_to_cpu(nat_blk->entries[i].block_addr);
 
-		if (blk_addr == NEW_ADDR)
+		if (blk_addr == NEW_ADDR) {
+			print_block_data(sbi->sb, current_nat_addr(sbi, start_nid),
+				page_address(nat_page), 0, F2FS_BLKSIZE);
 			return -EINVAL;
+		}
 
 		if (blk_addr == NULL_ADDR) {
 			add_free_nid(sbi, start_nid, true, true);
@@ -2327,6 +2344,30 @@ int f2fs_build_free_nids(struct f2fs_sb_info *sbi, bool sync, bool mount)
 }
 
 /*
+ * f2fs_has_free_inodes()
+ * @sbi: in-core super block structure.
+ *
+ * Check if filesystem has inodes available for allocation.
+ * On success return 1, return 0 on failure.
+ */
+static inline bool f2fs_has_free_inodes(struct f2fs_sb_info *sbi)
+{
+	struct f2fs_nm_info *nm_i = NM_I(sbi);
+
+#define F2FS_DEF_RESERVE_INODE 8192
+	if (likely(nm_i->available_nids > F2FS_DEF_RESERVE_INODE))
+		return true;
+
+	/* Hm, nope.  Are (enough) root reserved inodes available? */
+	if (uid_eq(F2FS_OPTION(sbi).s_resuid, current_fsuid()) ||
+			(!gid_eq(F2FS_OPTION(sbi).s_resgid, GLOBAL_ROOT_GID) &&
+			 in_group_p(F2FS_OPTION(sbi).s_resgid)) ||
+			capable(CAP_SYS_RESOURCE))
+		return true;
+	return false;
+}
+
+/*
  * If this function returns success, caller can obtain a new nid
  * from second parameter of this function.
  * The returned nid could be used ino as well as nid when inode is created.
@@ -2343,7 +2384,8 @@ retry:
 
 	spin_lock(&nm_i->nid_list_lock);
 
-	if (unlikely(nm_i->available_nids == 0)) {
+	if (unlikely(nm_i->available_nids == 0)
+			|| f2fs_has_free_inodes(sbi) == 0) {
 		spin_unlock(&nm_i->nid_list_lock);
 		return false;
 	}

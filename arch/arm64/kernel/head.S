@@ -88,8 +88,16 @@ _head:
 	le64sym	_kernel_offset_le		// Image load offset from start of RAM, little-endian
 	le64sym	_kernel_size_le			// Effective size of kernel image, little-endian
 	le64sym	_kernel_flags_le		// Informative flags, little-endian
+#ifdef CONFIG_UH_RKP
+	.quad	rkp_init_data - .		// rkp init data
+#else
 	.quad	0				// reserved
-	.quad	0				// reserved
+#endif
+#ifdef CONFIG_PROCA
+	le64sym	_proca_conf_offset		// memory info for proca ta
+#else
+	.quad	0xecefecef			// Magic number for proca ta
+#endif
 	.quad	0				// reserved
 	.ascii	"ARM\x64"			// Magic number
 #ifdef CONFIG_EFI
@@ -137,9 +145,13 @@ preserve_boot_args:
 	mov	x21, x0				// x21=FDT
 
 	adr_l	x0, boot_args			// record the contents of
+#ifndef CONFIG_RANDOMIZE_BASE
 	stp	x21, x1, [x0]			// x0 .. x3 at kernel entry
 	stp	x2, x3, [x0, #16]
-
+#else
+	stp	x21, xzr, [x0]			// x0 .. x3 at kernel entry
+	stp	xzr, xzr, [x0, #16]
+#endif
 	dmb	sy				// needed before dc ivac with
 						// MMU off
 

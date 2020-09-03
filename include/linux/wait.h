@@ -615,7 +615,11 @@ extern int do_wait_intr_irq(wait_queue_head_t *, wait_queue_entry_t *);
 	__set_current_state(TASK_RUNNING);					\
 	__ret;									\
 })
+extern int do_wait_freeze(wait_queue_head_t *, wait_queue_entry_t *);
 
+#define wait_event_freezable_exclusive_locked(wq, condition)		\
+	((condition)								\
+	 ? 0 : __wait_event_interruptible_locked(wq, condition, 1, do_wait_freeze))
 
 /**
  * wait_event_interruptible_locked - sleep until a condition gets true

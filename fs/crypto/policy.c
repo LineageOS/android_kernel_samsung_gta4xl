@@ -52,6 +52,10 @@ static int create_encryption_context_from_policy(struct inode *inode,
 	BUILD_BUG_ON(sizeof(ctx.nonce) != FS_KEY_DERIVATION_NONCE_SIZE);
 	get_random_bytes(ctx.nonce, FS_KEY_DERIVATION_NONCE_SIZE);
 
+#if defined(CONFIG_FSCRYPT_SDP) || defined(CONFIG_DDAR)
+	ctx.knox_flags = 0;
+#endif
+
 	return inode->i_sb->s_cop->set_context(inode, &ctx, sizeof(ctx), NULL);
 }
 
@@ -259,6 +263,19 @@ int fscrypt_inherit_context(struct inode *parent, struct inode *child,
 	       FS_KEY_DESCRIPTOR_SIZE);
 	get_random_bytes(ctx.nonce, FS_KEY_DERIVATION_NONCE_SIZE);
 	BUILD_BUG_ON(sizeof(ctx) != FSCRYPT_SET_CONTEXT_MAX_SIZE);
+#if defined(CONFIG_DDAR) || defined(CONFIG_FSCRYPT_SDP)
+	ctx.knox_flags = 0;
+#endif
+
+#ifdef CONFIG_FSCRYPT_SDP
+	res = fscrypt_sdp_inherit_context(parent, child, &ctx, fs_data);
+	if (res) {
+		printk_once(KERN_WARNING
+				"%s: Failed to set sensitive ongoing flag (err:%d)\n", __func__, res);
+		return res;
+	}
+#endif
+
 	res = parent->i_sb->s_cop->set_context(child, &ctx,
 						sizeof(ctx), fs_data);
 	if (res)

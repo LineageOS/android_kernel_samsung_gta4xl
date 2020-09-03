@@ -112,12 +112,36 @@ struct scan_control {
 	/* One of the zones is ready for compaction */
 	unsigned int compaction_ready:1;
 
+#ifdef CONFIG_KANOND
+	unsigned int anon_only_mode:1;
+#endif
+
 	/* Incremented by the number of inactive pages that were scanned */
 	unsigned long nr_scanned;
 
 	/* Number of pages freed so far during a call to shrink_zones() */
 	unsigned long nr_reclaimed;
+
+	/*
+	 * Reclaim pages from a vma. If the page is shared by other tasks
+	 * it is zapped from a vma without reclaim so it ends up remaining
+	 * on memory until last task zap it.
+	 */
+	struct vm_area_struct *target_vma;
 };
+
+#ifdef CONFIG_KANOND
+static inline bool is_kanond(struct scan_control *sc)
+{
+	return sc->anon_only_mode;
+}
+#else
+static inline bool is_kanond(struct scan_control *sc)
+{
+	return false;
+}
+#endif
+
 
 #ifdef ARCH_HAS_PREFETCH
 #define prefetch_prev_lru_page(_page, _base, _field)			\
@@ -983,7 +1007,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 		struct address_space *mapping;
 		struct page *page;
 		int may_enter_fs;
-		enum page_references references = PAGEREF_RECLAIM_CLEAN;
+		enum page_references references = PAGEREF_RECLAIM;
 		bool dirty, writeback;
 
 		cond_resched();
@@ -1083,7 +1107,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			/* Case 1 above */
 			if (current_is_kswapd() &&
 			    PageReclaim(page) &&
-			    test_bit(PGDAT_WRITEBACK, &pgdat->flags)) {
+			    pgdat && test_bit(PGDAT_WRITEBACK, &pgdat->flags)) {
 				nr_immediate++;
 				goto activate_locked;
 
@@ -1186,7 +1210,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 
 			if (unlikely(PageTransHuge(page)))
 				flags |= TTU_SPLIT_HUGE_PMD;
-			if (!try_to_unmap(page, flags)) {
+			if (!try_to_unmap(page, flags, sc->target_vma)) {
 				nr_unmap_fail++;
 				goto activate_locked;
 			}
@@ -1205,7 +1229,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			 */
 			if (page_is_file_cache(page) &&
 			    (!current_is_kswapd() || !PageReclaim(page) ||
-			     !test_bit(PGDAT_DIRTY, &pgdat->flags))) {
+			    (pgdat && !test_bit(PGDAT_DIRTY, &pgdat->flags)))) {
 				/*
 				 * Immediately reclaim when written back.
 				 * Similar in principal to deactivate_page()
@@ -1331,6 +1355,13 @@ free_it:
 			(*get_compound_page_dtor(page))(page);
 		} else
 			list_add(&page->lru, &free_pages);
+		/*
+		 * If pagelist are from multiple zones, we should decrease
+		 * NR_ISOLATED_ANON + x on freed pages in here.
+		 */
+		if (!pgdat)
+			dec_zone_page_state(page, NR_ISOLATED_ANON +
+					page_is_file_cache(page));
 		continue;
 
 activate_locked:
@@ -1378,6 +1409,8 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 		.gfp_mask = GFP_KERNEL,
 		.priority = DEF_PRIORITY,
 		.may_unmap = 1,
+		/* Doesn't allow to write out dirty page */
+		.may_writepage = 0,
 	};
 	unsigned long ret;
 	struct page *page, *next;
@@ -1397,6 +1430,39 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 	mod_node_page_state(zone->zone_pgdat, NR_ISOLATED_FILE, -ret);
 	return ret;
 }
+
+#ifdef CONFIG_PROCESS_RECLAIM
+unsigned long reclaim_pages_from_list(struct list_head *page_list,
+					struct vm_area_struct *vma)
+{
+	struct scan_control sc = {
+		.gfp_mask = GFP_KERNEL,
+		.priority = DEF_PRIORITY,
+		.may_writepage = 1,
+		.may_unmap = 1,
+		.may_swap = 1,
+		.target_vma = vma,
+	};
+
+	unsigned long nr_reclaimed;
+	struct page *page;
+
+	list_for_each_entry(page, page_list, lru)
+		ClearPageActive(page);
+	nr_reclaimed = shrink_page_list(page_list, NULL, &sc,
+				TTU_IGNORE_ACCESS, NULL, true);
+
+	while (!list_empty(page_list)) {
+		page = lru_to_page(page_list);
+		list_del(&page->lru);
+		dec_zone_page_state(page, NR_ISOLATED_ANON +
+				page_is_file_cache(page));
+		putback_lru_page(page);
+	}
+
+	return nr_reclaimed;
+}
+#endif
 
 /*
  * Attempt to remove the specified page from its LRU.  Only take this page
@@ -1803,6 +1869,13 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 			__count_vm_events(PGSCAN_KSWAPD, nr_scanned);
 		count_memcg_events(lruvec_memcg(lruvec), PGSCAN_KSWAPD,
 				   nr_scanned);
+#ifdef CONFIG_KANOND
+	} else if (is_kanond(sc)) {
+		if (global_reclaim(sc))
+			__count_vm_events(PGSCAN_KANOND, nr_scanned);
+		count_memcg_events(lruvec_memcg(lruvec), PGSCAN_KANOND,
+				   nr_scanned);
+#endif
 	} else {
 		if (global_reclaim(sc))
 			__count_vm_events(PGSCAN_DIRECT, nr_scanned);
@@ -1824,6 +1897,13 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 			__count_vm_events(PGSTEAL_KSWAPD, nr_reclaimed);
 		count_memcg_events(lruvec_memcg(lruvec), PGSTEAL_KSWAPD,
 				   nr_reclaimed);
+#ifdef CONFIG_KANOND
+	} else if (is_kanond(sc)) {
+		if (global_reclaim(sc))
+			__count_vm_events(PGSTEAL_KANOND, nr_reclaimed);
+		count_memcg_events(lruvec_memcg(lruvec), PGSTEAL_KANOND,
+				   nr_reclaimed);
+#endif
 	} else {
 		if (global_reclaim(sc))
 			__count_vm_events(PGSTEAL_DIRECT, nr_reclaimed);
@@ -2184,6 +2264,135 @@ enum scan_balance {
 	SCAN_FILE,
 };
 
+/* mem_boost throttles only kswapd's behavior */
+enum mem_boost {
+	NO_BOOST,
+	BOOST_MID = 1,
+	BOOST_HIGH = 2,
+};
+static int mem_boost_mode = NO_BOOST;
+static unsigned long last_mode_change;
+
+#define MEM_BOOST_MAX_TIME (5 * HZ) /* 5 sec */
+
+#ifdef CONFIG_SYSFS
+static ssize_t mem_boost_mode_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME))
+		mem_boost_mode = NO_BOOST;
+	return sprintf(buf, "%d\n", mem_boost_mode);
+}
+
+static ssize_t mem_boost_mode_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int mode;
+	int err;
+
+	err = kstrtoint(buf, 10, &mode);
+	if (err || mode > BOOST_HIGH || mode < NO_BOOST)
+		return -EINVAL;
+
+	mem_boost_mode = mode;
+	last_mode_change = jiffies;
+
+	return count;
+}
+
+#define MEM_BOOST_ATTR(_name) \
+	static struct kobj_attribute _name##_attr = \
+		__ATTR(_name, 0644, _name##_show, _name##_store)
+MEM_BOOST_ATTR(mem_boost_mode);
+
+#ifdef CONFIG_KANOND
+static ssize_t available_size_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%ld %s\n",
+		       get_kanond_wmark_high() >> (20 - PAGE_SHIFT),
+		       get_kanond_balanced_reason());
+}
+
+static ssize_t available_size_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	unsigned long size_mb, size_pages;
+	int err;
+
+	err = kstrtoul(buf, 10, &size_mb);
+	if (err)
+		return -EINVAL;
+	size_pages = size_mb << (20 - PAGE_SHIFT);
+	err = set_kanond_wmark_high(size_pages);
+	if (err)
+		return -EINVAL;
+	return count;
+}
+
+static struct kobj_attribute available_size_attr
+		= __ATTR_RW(available_size);
+#endif
+
+static struct attribute *vmscan_attrs[] = {
+	&mem_boost_mode_attr.attr,
+#ifdef CONFIG_KANOND
+	&available_size_attr.attr,
+#endif
+	NULL,
+};
+
+static struct attribute_group vmscan_attr_group = {
+	.attrs = vmscan_attrs,
+	.name = "vmscan",
+};
+#endif
+
+static inline bool mem_boost_pgdat_wmark(struct pglist_data *pgdat)
+{
+	int z;
+	struct zone *zone;
+	unsigned long mark;
+
+	for (z = 0; z < MAX_NR_ZONES; z++) {
+		zone = &pgdat->node_zones[z];
+		if (!managed_zone(zone))
+			continue;
+		mark = low_wmark_pages(zone); //TODO: low, high, or (low + high)/2
+		if (zone_watermark_ok_safe(zone, 0, mark, 0))
+			return true;
+	}
+	return false;
+}
+
+#define MEM_BOOST_THRESHOLD ((600 * 1024 * 1024) / (PAGE_SIZE))
+inline bool need_memory_boosting(struct pglist_data *pgdat)
+{
+	bool ret;
+	unsigned long pgdatfile = node_page_state(pgdat, NR_ACTIVE_FILE) +
+				node_page_state(pgdat, NR_INACTIVE_FILE);
+
+	if (time_after(jiffies, last_mode_change + MEM_BOOST_MAX_TIME) ||
+			pgdatfile < MEM_BOOST_THRESHOLD)
+		mem_boost_mode = NO_BOOST;
+
+	switch (mem_boost_mode) {
+	case BOOST_HIGH:
+		ret = true;
+		break;
+	case BOOST_MID:
+		ret = mem_boost_pgdat_wmark(pgdat) ? false : true;
+		break;
+	case NO_BOOST:
+	default:
+		ret = false;
+		break;
+	}
+	return ret;
+}
+
 /*
  * Determine how aggressively the anon and file LRU lists should be
  * scanned.  The relative value of each set of LRU lists is determined
@@ -2207,6 +2416,11 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long anon, file;
 	unsigned long ap, fp;
 	enum lru_list lru;
+
+	if (is_kanond(sc)) {
+		scan_balance = SCAN_ANON;
+		goto out;
+	}
 
 	/* If we have no swap space, do not bother scanning anon pages. */
 	if (!sc->may_swap || mem_cgroup_get_nr_swap_pages(memcg) <= 0) {
@@ -2278,6 +2492,11 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 		}
 	}
 
+	if (current_is_kswapd() && need_memory_boosting(pgdat)) {
+		scan_balance = SCAN_FILE;
+		goto out;
+	}
+
 	/*
 	 * If there is enough inactive page cache, i.e. if the size of the
 	 * inactive list is greater than that of the active list *and* the
@@ -2287,7 +2506,8 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	 * lruvec even if it has plenty of old anonymous pages unless the
 	 * system is under heavy pressure.
 	 */
-	if (!inactive_list_is_low(lruvec, true, memcg, sc, false) &&
+	if (!IS_ENABLED(CONFIG_BALANCE_ANON_FILE_RECLAIM) &&
+	    !inactive_list_is_low(lruvec, true, memcg, sc, false) &&
 	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority) {
 		scan_balance = SCAN_FILE;
 		goto out;
@@ -2634,15 +2854,15 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 			shrink_node_memcg(pgdat, memcg, sc, &lru_pages);
 			node_lru_pages += lru_pages;
 
-			if (memcg)
+			if (!is_kanond(sc) && memcg)
 				shrink_slab(sc->gfp_mask, pgdat->node_id,
 					    memcg, sc->nr_scanned - scanned,
 					    lru_pages);
-
-			/* Record the group's reclaim efficiency */
-			vmpressure(sc->gfp_mask, memcg, false,
-				   sc->nr_scanned - scanned,
-				   sc->nr_reclaimed - reclaimed);
+			if (!is_kanond(sc))
+				/* Record the group's reclaim efficiency */
+				vmpressure(sc->gfp_mask, memcg, false,
+					   sc->nr_scanned - scanned,
+					   sc->nr_reclaimed - reclaimed);
 
 			/*
 			 * Direct reclaim and kswapd have to scan all memory
@@ -2665,7 +2885,7 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 		 * Shrink the slab caches in the same proportion that
 		 * the eligible LRU pages were scanned.
 		 */
-		if (global_reclaim(sc))
+		if (!is_kanond(sc) && global_reclaim(sc))
 			shrink_slab(sc->gfp_mask, pgdat->node_id, NULL,
 				    sc->nr_scanned - nr_scanned,
 				    node_lru_pages);
@@ -2675,10 +2895,11 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 			reclaim_state->reclaimed_slab = 0;
 		}
 
-		/* Record the subtree's reclaim efficiency */
-		vmpressure(sc->gfp_mask, sc->target_mem_cgroup, true,
-			   sc->nr_scanned - nr_scanned,
-			   sc->nr_reclaimed - nr_reclaimed);
+		if (!is_kanond(sc))
+			/* Record the subtree's reclaim efficiency */
+			vmpressure(sc->gfp_mask, sc->target_mem_cgroup, true,
+				   sc->nr_scanned - nr_scanned,
+				   sc->nr_reclaimed - nr_reclaimed);
 
 		if (sc->nr_reclaimed - nr_reclaimed)
 			reclaimable = true;
@@ -2868,12 +3089,13 @@ static unsigned long do_try_to_free_pages(struct zonelist *zonelist,
 retry:
 	delayacct_freepages_start();
 
-	if (global_reclaim(sc))
+	if (!is_kanond(sc) && global_reclaim(sc))
 		__count_zid_vm_events(ALLOCSTALL, sc->reclaim_idx, 1);
 
 	do {
-		vmpressure_prio(sc->gfp_mask, sc->target_mem_cgroup,
-				sc->priority);
+		if (!is_kanond(sc))
+			vmpressure_prio(sc->gfp_mask, sc->target_mem_cgroup,
+					sc->priority);
 		sc->nr_scanned = 0;
 		shrink_zones(zonelist, sc);
 
@@ -3065,7 +3287,11 @@ unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
 		.priority = DEF_PRIORITY,
 		.may_writepage = !laptop_mode,
 		.may_unmap = 1,
+#ifdef CONFIG_DIRECT_RECLAIM_FILE_PAGES_ONLY
+		.may_swap = 0,
+#else
 		.may_swap = 1,
+#endif
 	};
 
 	/*
@@ -3546,6 +3772,20 @@ static void kswapd_try_to_sleep(pg_data_t *pgdat, int alloc_order, int reclaim_o
 	finish_wait(&pgdat->kswapd_wait, &wait);
 }
 
+#if CONFIG_KSWAPD_CPU
+static struct cpumask kswapd_cpumask;
+static void init_kswapd_cpumask(void)
+{
+	int i;
+
+	cpumask_clear(&kswapd_cpumask);
+	for (i = 0; i < nr_cpu_ids; i++) {
+		if (CONFIG_KSWAPD_CPU & (1 << i))
+			cpumask_set_cpu(i, &kswapd_cpumask);
+	}
+}
+#endif
+
 /*
  * The background pageout daemon, started as a kernel thread
  * from the init process.
@@ -3569,7 +3809,11 @@ static int kswapd(void *p)
 	struct reclaim_state reclaim_state = {
 		.reclaimed_slab = 0,
 	};
+#if CONFIG_KSWAPD_CPU
+	const struct cpumask *cpumask = &kswapd_cpumask;
+#else
 	const struct cpumask *cpumask = cpumask_of_node(pgdat->node_id);
+#endif
 
 	if (!cpumask_empty(cpumask))
 		set_cpus_allowed_ptr(tsk, cpumask);
@@ -3672,7 +3916,7 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
 	wake_up_interruptible(&pgdat->kswapd_wait);
 }
 
-#ifdef CONFIG_HIBERNATION
+#if defined(CONFIG_HIBERNATION) || defined(CONFIG_KANOND)
 /*
  * Try to free `nr_to_reclaim' of memory, system-wide, and return the number of
  * freed pages.
@@ -3681,7 +3925,8 @@ void wakeup_kswapd(struct zone *zone, int order, enum zone_type classzone_idx)
  * LRU order by reclaiming preferentially
  * inactive > active > active referenced > active mapped
  */
-unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
+unsigned long __shrink_all_memory(unsigned long nr_to_reclaim,
+				  struct shrink_result *sr)
 {
 	struct reclaim_state reclaim_state;
 	struct scan_control sc = {
@@ -3693,6 +3938,9 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
 		.may_unmap = 1,
 		.may_swap = 1,
 		.hibernation_mode = 1,
+#ifdef CONFIG_KANOND
+		.anon_only_mode = sr ? 1 : 0,
+#endif
 	};
 	struct zonelist *zonelist = node_zonelist(numa_node_id(), sc.gfp_mask);
 	struct task_struct *p = current;
@@ -3709,8 +3957,25 @@ unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
 	p->reclaim_state = NULL;
 	fs_reclaim_release(sc.gfp_mask);
 	memalloc_noreclaim_restore(noreclaim_flag);
-
+#ifdef CONFIG_KANOND
+	if (sr) {
+		sr->priority = sc.priority;
+		sr->nr_scanned = sc.nr_scanned;
+		sr->nr_reclaimed = sc.nr_reclaimed;
+	}
+#endif
 	return nr_reclaimed;
+}
+
+unsigned long shrink_all_memory(unsigned long nr_to_reclaim)
+{
+	return __shrink_all_memory(nr_to_reclaim, NULL);
+}
+
+unsigned long shrink_anon_memory(unsigned long nr_to_reclaim,
+				 struct shrink_result *sr)
+{
+	return __shrink_all_memory(nr_to_reclaim, sr);
 }
 #endif /* CONFIG_HIBERNATION */
 
@@ -3726,7 +3991,11 @@ static int kswapd_cpu_online(unsigned int cpu)
 		pg_data_t *pgdat = NODE_DATA(nid);
 		const struct cpumask *mask;
 
+#if CONFIG_KSWAPD_CPU
+		mask = &kswapd_cpumask;
+#else
 		mask = cpumask_of_node(pgdat->node_id);
+#endif
 
 		if (cpumask_any_and(cpu_online_mask, mask) < nr_cpu_ids)
 			/* One of our CPUs online: restore mask */
@@ -3776,6 +4045,9 @@ static int __init kswapd_init(void)
 {
 	int nid, ret;
 
+#if CONFIG_KSWAPD_CPU
+	init_kswapd_cpumask();
+#endif
 	swap_setup();
 	for_each_node_state(nid, N_MEMORY)
  		kswapd_run(nid);
@@ -3783,6 +4055,8 @@ static int __init kswapd_init(void)
 					"mm/vmscan:online", kswapd_cpu_online,
 					NULL);
 	WARN_ON(ret < 0);
+	if (sysfs_create_group(mm_kobj, &vmscan_attr_group))
+		pr_err("vmscan: register sysfs failed\n");
 	return 0;
 }
 

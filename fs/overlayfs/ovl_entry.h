@@ -33,7 +33,11 @@ struct ovl_fs {
 	/* pathnames of lower and upper dirs, for show_options */
 	struct ovl_config config;
 	/* creds of process who forced instantiation of super block */
+#ifdef CONFIG_RKP_KDP
+	struct cred *creator_cred;
+#else
 	const struct cred *creator_cred;
+#endif
 	bool tmpfile;
 	bool noxattr;
 	/* sb common to all layers */
