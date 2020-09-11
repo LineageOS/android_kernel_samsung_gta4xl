@@ -2,6 +2,10 @@
 dtbo-y += samsung/exynos9611-gta4xlwifi_eur_open_05.dtbo
 dtbo-y += samsung/exynos9611-gta4xlwifi_eur_open_04.dtbo
 dtbo-y += samsung/exynos9611-gta4xlwifi_eur_open_00.dtbo
+dtbo-y += samsung/exynos9611-gta4xl_eur_open_05.dtbo
+dtbo-y += samsung/exynos9611-gta4xl_eur_open_04.dtbo
+dtbo-y += samsung/exynos9611-gta4xl_eur_open_03.dtbo
+dtbo-y += samsung/exynos9611-gta4xl_eur_open_01.dtbo
 dtb-y += exynos/exynos9610.dtb
 
 targets += dtbs
