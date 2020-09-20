@@ -336,20 +336,18 @@ void himax_int_enable(int enable)
 	unsigned long irqflags = 0;
 	int irqnum = ts->hx_irq;
 
-	spin_lock_irqsave(&ts->irq_lock, irqflags);
-	I("%s: Entering! irqnum = %d\n", __func__, irqnum);
-	if (enable == 1 && atomic_read(&ts->irq_state) == 0) {
-		atomic_set(&ts->irq_state, 1);
-		enable_irq(irqnum);
-		private_ts->irq_enabled = 1;
-	} else if (enable == 0 && atomic_read(&ts->irq_state) == 1) {
-		atomic_set(&ts->irq_state, 0);
-		disable_irq_nosync(irqnum);
-		private_ts->irq_enabled = 0;
-	}
+	if (enable != atomic_read(&ts->irq_state)) {
+		spin_lock_irqsave(&ts->irq_lock, irqflags);
+		I("%s: Entering! irqnum = %d\n", __func__, irqnum);
+		atomic_set(&ts->irq_state, enable);
 
-	I("%s, %d\n", __func__, enable);
-	spin_unlock_irqrestore(&ts->irq_lock, irqflags);
+		enable ? enable_irq(irqnum) : disable_irq_nosync(irqnum);
+
+		private_ts->irq_enabled = enable;
+
+		I("%s, %d\n", __func__, enable);
+		spin_unlock_irqrestore(&ts->irq_lock, irqflags);
+	}
 }
 EXPORT_SYMBOL(himax_int_enable);
 

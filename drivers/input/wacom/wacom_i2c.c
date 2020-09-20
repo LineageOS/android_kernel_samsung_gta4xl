@@ -1271,6 +1271,10 @@ int wacom_i2c_coord(struct wacom_i2c *wac_i2c)
 		wac_i2c->localscan_mode = false;
 	}
 
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_SPI
+	himax_int_enable(!wac_i2c->pen_prox && !wac_i2c->pen_pressed);
+#endif
+
 	return 0;
 }
 

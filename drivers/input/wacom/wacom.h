@@ -397,4 +397,8 @@ extern int set_spen_mode(int mode);
 #ifdef CONFIG_SEC_FACTORY
 bool wacom_check_ub(struct wacom_i2c *wac_i2c);
 #endif
+
+#ifdef CONFIG_TOUCHSCREEN_HIMAX_SPI
+extern void himax_int_enable(int enable);
+#endif
 #endif /* _LINUX_WACOM_H_ */
