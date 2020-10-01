@@ -2081,7 +2081,7 @@
 		clocks = <0x2 0x1f6>;
 		iommus = <0xb 0xc>;
 		ip_ver = <0x1202>;
-		debug_mode = <0x1>;
+		debug_mode = <0x0>;
 		share_sysmmu = <0x0>;
 		axid_mask = <0xffff>;
 		mfc_fault_num = <0x0>;
@@ -4697,7 +4697,7 @@
 			dm-index = <0x2>;
 			use_delay_time = "true";
 			delay_time_list = "20";
-			freq_info = <0x1fefc8 0xa50a0 0x664b8 0x664b8 0x1fefc8 0x664b8>;
+			freq_info = <0x1fefc8 0xa50a0 0x664b8 0x664b8 0x1fefc8 0xa50a0>;
 			boot_info = <0x28 0x1fefc8>;
 			governor = <0x0>;
 			bts_update = "false";
@@ -5910,7 +5910,7 @@
 			boost_table = <0x0>;
 			up_rate_limit_table = <0x5>;
 			down_rate_limit_table = <0x5>;
-			upscale_ratio_table = <0x50>;
+			upscale_ratio_table = <0x3c 0xde2b0 0x50>;
 		};
 
 		domain@1 {

@@ -418,7 +418,7 @@
 					type = "gpio,high", "gpio_ldo_en", "delay,usleep", "5000", "gpio,high", "gpio_buck_en", "delay,usleep", "5000";
 				};
 
-				dsim_set_panel_power_disable {
+				dsim_set_panel_power_disable_notaot {
 					type = "gpio,low", "gpio_lcd_rst", "delay,usleep", "5000", "gpio,low", "gpio_buck_en", "delay,usleep", "5000", "gpio,low", "gpio_ldo_en";
 				};
 
@@ -456,9 +456,9 @@
 
 			reserved-memory {
 
-				framebuffer@0xCA700000 {
+				framebuffer@0xCA000000 {
 					compatible = "exynos,fb_rmem";
-					reg = <0x0 0xca700000 0xd00000>;
+					reg = <0x0 0xca000000 0x1400000>;
 					linux,phandle = <0x3>;
 					phandle = <0x3>;
 				};
@@ -3229,6 +3229,8 @@
 			#address-cells = <0x1>;
 			#size-cells = <0x0>;
 			status = "okay";
+			samsung,glitch-filter;
+			samsung,fix-doxfer-return;
 			samsung,i2c-max-bus-freq = <0x61a80>;
 
 			sm5713@49 {
@@ -3371,8 +3373,11 @@
 				himax,project_name = "GTA4XL", "P615";
 				himax,area-size = <0x50 0x51 0x3c>;
 				himax,fw-path = "tsp_himax/hx83102e_gta4xl.fw";
+				himax,fw-path_old = "tsp_himax/hx83102e_gta4xl_old.fw";
 				report_type = <0x1>;
 				himax,factory_item_version = <0x1>;
+				support_aot = <0x1>;
+				support_dual_fw = <0x1>;
 
 				controller-data {
 					samsung,spi-feedback-delay = <0x0>;
@@ -3462,6 +3467,8 @@
 				fuelgauge,sw_v_empty_voltage = <0xc80>;
 				fuelgauge,sw_v_empty_voltage_cisd = <0xc1c>;
 				fuelgauge,sw_v_empty_recover_voltage = <0xd98>;
+				fuelgauge,ttf_capacity = <0x1766>;
+				fuelgauge,cv_data = <0xaf5 0x352 0x8c1 0xab4 0x35c 0x867 0xa28 0x366 0x80d 0x99b 0x371 0x7b3 0x8f3 0x37a 0x753 0x841 0x385 0x6db 0x783 0x38e 0x675 0x728 0x398 0x605 0x689 0x3a2 0x580 0x5f3 0x3ac 0x4f1 0x55d 0x3b7 0x443 0x4df 0x3c0 0x3ad 0x440 0x3ca 0x2e4 0x39a 0x3d4 0x20a 0x3d4 0x3de 0xec 0x2a8 0x3e8 0x0>;
 
 				battery_params {
 					battery,id = <0x0>;
@@ -3616,7 +3623,7 @@
 				battery,siop_hv_input_limit_current = <0x2bc>;
 				battery,siop_hv_input_limit_current_2nd = <0x226>;
 				battery,siop_hv_charging_limit_current = <0x3e8>;
-				battery,ttf_hv_charge_current = <0x960>;
+				battery,ttf_hv_charge_current = <0xa28>;
 				battery,rp_current_rp1 = <0x1f4>;
 				battery,rp_current_rp2 = <0x5dc>;
 				battery,rp_current_rp3 = <0xbb8>;
@@ -4388,7 +4395,7 @@
 		shmem = "/fragment@modemif/__overlay__/shmem@F0000000";
 		decon_board_hx83102e = "/fragment@lcd/__overlay__/decon_board_hx83102e";
 		hx83102e = "/fragment@lcd/__overlay__/hx83102e";
-		fb_handover = "/fragment@lcd/__overlay__/reserved-memory/framebuffer@0xCA700000";
+		fb_handover = "/fragment@lcd/__overlay__/reserved-memory/framebuffer@0xCA000000";
 		fimc_is_sensor_4ha = "/fragment@camera/__overlay__/fimc-fimc_is_sensor_4ha@2d";
 		fimc_is_sensor_5e9 = "/fragment@camera/__overlay__/fimc-is_sensor_5e9@10";
 		sensor3_ch_mode0 = "/fragment@8/__overlay__/sensor3-ch-mode0";
