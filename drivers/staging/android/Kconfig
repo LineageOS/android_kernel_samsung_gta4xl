@@ -41,7 +41,6 @@ config SAMSUNG_FREECESS
 
 source "drivers/staging/android/ion/Kconfig"
 
-
 endif # if ANDROID
 
 endmenu
