@@ -266,6 +266,7 @@ struct exynos_eint_gpio_save {
 	u32 eint_con;
 	u32 eint_fltcon0;
 	u32 eint_fltcon1;
+	u32 eint_mask;
 };
 
 static void exynos_eint_flt_config(int en, int sel, int width,
