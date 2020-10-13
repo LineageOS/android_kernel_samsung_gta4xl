@@ -505,7 +505,8 @@ static int slsi_sm_ant_service_cleanup(bool force_cleanup)
 		 **/
 		if (ant_service.service_started)
 			ret = slsi_sm_ant_service_cleanup_stop_service();
-			ant_service.service_started = false;
+
+		ant_service.service_started = false;
 
 			if (ret < 0 && !force_cleanup) {
 				SCSC_TAG_DEBUG(BT_COMMON, "service stop failed. Recovery has been triggered\n");
