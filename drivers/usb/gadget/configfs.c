@@ -622,6 +622,10 @@ static int config_usb_cfg_link(
 		goto out;
 	}
 
+	if (f->config == NULL) {
+		f->config = c;
+	}
+
 #ifdef CONFIG_USB_CONFIGFS_UEVENT
 	list_add_tail(&f->list, &gi->linked_func);
 #else
