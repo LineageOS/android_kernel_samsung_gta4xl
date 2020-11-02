@@ -592,6 +592,13 @@ static int config_usb_cfg_link(
 		struct config_usb_cfg *cfg;
 		struct gadget_config_name *cn;
 
+		list_for_each_entry_safe(f, tmp, &gi->linked_func, list) {
+			if (f->config == NULL) {
+				f->config = c;
+			}
+		}
+
+
 		cfg = container_of(c, struct config_usb_cfg, c);
 		if (!list_empty(&cfg->string_list)) {
 			i = 0;
