@@ -37,6 +37,8 @@ source "drivers/usb/typec/ucsi/Kconfig"
 
 source "drivers/usb/typec/manager/Kconfig"
 
+source "drivers/usb/typec/s2mu106/Kconfig"
+
 source "drivers/usb/typec/sm5713/Kconfig"
 
 source "drivers/usb/typec/sep/Kconfig"

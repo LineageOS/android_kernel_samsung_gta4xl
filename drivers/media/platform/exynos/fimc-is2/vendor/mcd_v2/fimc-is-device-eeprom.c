@@ -68,6 +68,12 @@ int fimc_is_eeprom_parse_dt(struct device_node *dnode, int rom_id)
 		specific->rom_share[share_rom_position].share_position = rom_id;
 	}
 
+#ifdef USE_DUALCAM_SET_CAL
+	specific->use_dualcam_set_cal = of_property_read_bool(dnode, "use_dualcam_set_cal");
+	if (specific->use_dualcam_set_cal == true)
+		probe_info("use_dualcam_set_cal\n");
+#endif
+
 	return 0;
 }
 

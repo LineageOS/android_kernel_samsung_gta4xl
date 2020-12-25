@@ -80,7 +80,6 @@ void mfc_mem_cleanup_user_shared_handle(struct mfc_ctx *ctx,
 int mfc_mem_ion_alloc(struct mfc_dev *dev,
 		struct mfc_special_buf *special_buf)
 {
-	struct mfc_ctx *ctx = dev->ctx[dev->curr_ctx];
 	int flag = ION_FLAG_NOZEROED;
 	const char *heapname;
 
@@ -101,14 +100,14 @@ int mfc_mem_ion_alloc(struct mfc_dev *dev,
 		break;
 	default:
 		heapname = "unknown";
-		mfc_err_ctx("not supported mfc mem type: %d, heapname: %s\n",
+		mfc_err_dev("not supported mfc mem type: %d, heapname: %s\n",
 				special_buf->buftype, heapname);
 		return -EINVAL;
 	}
 	special_buf->dma_buf =
 			ion_alloc_dmabuf(heapname, special_buf->size, flag);
 	if (IS_ERR(special_buf->dma_buf)) {
-		mfc_err_ctx("Failed to allocate buffer (err %ld)\n",
+		mfc_err_dev("Failed to allocate buffer (err %ld)\n",
 				PTR_ERR(special_buf->dma_buf));
 		call_dop(dev, dump_and_stop_debug_mode, dev);
 		goto err_ion_alloc;
@@ -116,7 +115,7 @@ int mfc_mem_ion_alloc(struct mfc_dev *dev,
 
 	special_buf->attachment = dma_buf_attach(special_buf->dma_buf, dev->device);
 	if (IS_ERR(special_buf->attachment)) {
-		mfc_err_ctx("Failed to get dma_buf_attach (err %ld)\n",
+		mfc_err_dev("Failed to get dma_buf_attach (err %ld)\n",
 				PTR_ERR(special_buf->attachment));
 		call_dop(dev, dump_and_stop_debug_mode, dev);
 		goto err_attach;
@@ -125,7 +124,7 @@ int mfc_mem_ion_alloc(struct mfc_dev *dev,
 	special_buf->sgt = dma_buf_map_attachment(special_buf->attachment,
 			DMA_BIDIRECTIONAL);
 	if (IS_ERR(special_buf->sgt)) {
-		mfc_err_ctx("Failed to get sgt (err %ld)\n",
+		mfc_err_dev("Failed to get sgt (err %ld)\n",
 				PTR_ERR(special_buf->sgt));
 		call_dop(dev, dump_and_stop_debug_mode, dev);
 		goto err_map;
@@ -134,7 +133,7 @@ int mfc_mem_ion_alloc(struct mfc_dev *dev,
 	special_buf->daddr = ion_iovmm_map(special_buf->attachment, 0,
 			special_buf->size, DMA_BIDIRECTIONAL, 0);
 	if (IS_ERR_VALUE(special_buf->daddr)) {
-		mfc_err_ctx("Failed to allocate iova (err 0x%p)\n",
+		mfc_err_dev("Failed to allocate iova (err 0x%p)\n",
 				&special_buf->daddr);
 		call_dop(dev, dump_and_stop_debug_mode, dev);
 		goto err_iovmm;
@@ -142,7 +141,7 @@ int mfc_mem_ion_alloc(struct mfc_dev *dev,
 
 	special_buf->vaddr = dma_buf_vmap(special_buf->dma_buf);
 	if (IS_ERR(special_buf->vaddr)) {
-		mfc_err_ctx("Failed to get vaddr (err 0x%p)\n",
+		mfc_err_dev("Failed to get vaddr (err 0x%p)\n",
 				&special_buf->vaddr);
 		call_dop(dev, dump_and_stop_debug_mode, dev);
 		goto err_vaddr;

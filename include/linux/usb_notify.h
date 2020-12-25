@@ -51,6 +51,10 @@ enum otg_notify_events {
 	NOTIFY_EVENT_PD_CONTRACT,
 	NOTIFY_EVENT_VBUS_RESET,
 	NOTIFY_EVENT_RESERVE_BOOSTER,
+	NOTIFY_EVENT_USB_CABLE,
+	NOTIFY_EVENT_USBD_SUSPEND,
+	NOTIFY_EVENT_USBD_UNCONFIGURE,
+	NOTIFY_EVENT_USBD_CONFIGURE,
 	NOTIFY_EVENT_VIRTUAL,
 };
 
@@ -117,6 +121,11 @@ enum otg_notify_data_role {
 	HNOTIFY_DFP,
 };
 
+enum usb_current_state {
+	NOTIFY_SUSPEND,
+	NOTIFY_UNCONFIGURE,
+	NOTIFY_CONFIGURE,
+};
 struct otg_notify {
 	int vbus_detect_gpio;
 	int redriver_en_gpio;

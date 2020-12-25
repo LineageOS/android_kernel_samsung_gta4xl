@@ -17,6 +17,8 @@ struct lcd_seq_info {
 extern int aot_enabled;
 #endif
 
+extern u32 dphy_timing[][10];
+
 static const unsigned char SEQ_SET_B9_PW[] = {
 	0xB9,
 	0x83, 0x10, 0x2E,
@@ -35,6 +37,11 @@ static const unsigned char SEQ_SET_BB_OTP_SETTING[] = {
 static const unsigned char SEQ_SET_E9_OTP_SETTING2[] = {
 	0xE9,
 	0x00,
+};
+
+static const unsigned char SEQ_SET_BA_REGISTER[] = {
+	0xBA,
+	0x70, 0x03, 0xA8, 0x83, 0xF2, 0x80, 0x00, 0x0D,
 };
 
 static const unsigned char SEQ_HX83102E_BL[] = {
@@ -111,6 +118,14 @@ static const unsigned char SEQ_SET_D1_TP_CTRL[] = {
 static const unsigned char SEQ_SET_B1_POWER[] = {
 	0xB1,
 	0x10, 0xFA, 0xAF, 0xAF, 0x29, 0x2D, 0xB2, 0x57,
+	0x4D, 0x36, 0x36, 0x36, 0x36, 0x22, 0x21, 0x15,
+	0x00,
+};
+
+/* A/D low temp < -15 C, VGH :17.4V 65H */
+static const unsigned char SEQ_SET_B1_POWER_LOW_TEMP[] = {
+	0xB1,
+	0x10, 0xFA, 0xAF, 0xAF, 0x29, 0x2D, 0xB2, 0x65,
 	0x4D, 0x36, 0x36, 0x36, 0x36, 0x22, 0x21, 0x15,
 	0x00,
 };
@@ -282,7 +297,7 @@ static const unsigned char SEQ_SET_C1_DGC_GAMMA3[] = {
 
 static const unsigned char SEQ_SET_E1_BANK00[] = {
 	0xE1,
-	0x06, 0x00,
+	0x07, 0x00,
 };
 
 static const unsigned char SEQ_SET_B9_CLOSE_PW[] = {

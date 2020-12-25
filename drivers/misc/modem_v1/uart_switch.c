@@ -247,6 +247,9 @@ __setup("uart_switch=", uart_switch_setup);
 int uart_switch_init(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+#if IS_ENABLED(CONFIG_MUIC_SYSFS)
+	struct device *switch_device = NULL;
+#endif
 
 	mif_info("uart_switch init start.\n");
 
@@ -297,6 +300,10 @@ int uart_switch_init(struct platform_device *pdev)
 	switch_data->uart_notifier.notifier_call = switch_handle_notification;
 	ifconn_notifier_register(&switch_data->uart_notifier, switch_handle_notification,
 					IFCONN_NOTIFY_MODEM, IFCONN_NOTIFY_MUIC);
+#endif
+
+#if IS_ENABLED(CONFIG_MUIC_SYSFS)
+	switch_device = sec_device_find("switch");
 #endif
 
 	/* create sysfs group */

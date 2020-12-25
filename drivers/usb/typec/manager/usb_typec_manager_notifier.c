@@ -54,6 +54,7 @@ typedef enum
 	MUIC_NOTIFIER
 }notifier_register;
 
+extern struct device *ccic_device;
 static int manager_notifier_init_done = 0;
 static int confirm_manager_notifier_register = 0;
 static int manager_notifier_init(void);
@@ -1113,12 +1114,7 @@ static int manager_notifier_init(void)
 	int notifier_result = 0;
 	pccic_data_t pccic_data;
 	struct device_node *np = NULL;
-	struct device *ccic_device = get_ccic_device();
 
-	if (!ccic_device) {
-		pr_err("%s: ccic_device is null.\n", __func__);
-		return -ENODEV;
-	}
 	pr_info("%s\n", __func__);
 
 	ccic_notifier_init();

@@ -18,6 +18,11 @@
 #include "fimc-is-device-sensor-peri.h"
 #include "fimc-is-device-sensor.h"
 #include "fimc-is-video.h"
+#if defined(CONFIG_LEDS_S2MU106_FLASH)
+#include <linux/muic/s2mu106-muic-hv.h>
+#include <linux/usb/typec/s2mu106/s2mu106_pd.h>
+#include <linux/usb/typec/s2mu106/s2mu106_typec.h>
+#endif
 
 extern struct device *fimc_is_dev;
 #ifdef FIXED_SENSOR_DEBUG
@@ -523,6 +528,7 @@ int fimc_is_sensor_mode_change(struct fimc_is_cis *cis, u32 mode)
 void fimc_is_sensor_setting_mode_change(struct fimc_is_device_sensor_peri *sensor_peri)
 {
 	struct fimc_is_device_sensor *device;
+	struct fimc_is_sensor_ctl *sensor_ctrl;
 	struct ae_param expo;
 	struct ae_param again;
 	struct ae_param dgain;
@@ -530,6 +536,7 @@ void fimc_is_sensor_setting_mode_change(struct fimc_is_device_sensor_peri *senso
 	u32 tgain[EXPOSURE_GAIN_MAX] = {0, 0, 0};
 	enum fimc_is_exposure_gain_count num_data;
 	u32 frame_duration = 0;
+	u32 m_fcount;
 
 	FIMC_BUG_VOID(!sensor_peri);
 
@@ -615,6 +622,13 @@ void fimc_is_sensor_setting_mode_change(struct fimc_is_device_sensor_peri *senso
 				again.long_val, again.middle_val, again.short_val,
 				dgain.long_val, dgain.middle_val, dgain.middle_val);
 
+	if (sensor_peri->cis.long_term_mode.sen_strm_off_on_enable) {
+		CALL_CISOPS(&sensor_peri->cis, cis_set_long_term_exposure, sensor_peri->subdev_cis);
+	} else {
+		if (sensor_peri->cis.cis_data->frame_length_lines_shifter > 0
+			&& sensor_peri->cis.cis_data->min_frame_us_time >= 1000000)
+			CALL_CISOPS(&sensor_peri->cis, cis_data_calculation, sensor_peri->subdev_cis, device->cfg->mode);
+	}
 	CALL_CISOPS(&sensor_peri->cis, cis_adjust_frame_duration, sensor_peri->subdev_cis,
 			expo.long_val, &frame_duration);
 	fimc_is_sensor_peri_s_frame_duration(device, frame_duration);
@@ -634,12 +648,22 @@ void fimc_is_sensor_setting_mode_change(struct fimc_is_device_sensor_peri *senso
 	fimc_is_sensor_peri_s_sensor_stats(device, false, NULL,
 			(void *)(uintptr_t)(sensor_peri->cis.sensor_stats || sensor_peri->cis.lsc_table_status));
 
-	sensor_peri->sensor_interface.cis_itf_ops.request_reset_expo_gain(&sensor_peri->sensor_interface,
-			num_data,
-			&expo.long_val,
-			tgain,
-			&again.long_val,
-			&dgain.long_val);
+	m_fcount = device->fcount % EXPECT_DM_NUM;
+	sensor_ctrl = &sensor_peri->cis.sensor_ctls[m_fcount];
+
+	/*
+	 * When sensor mode change with MFHDR Capture as Cropped Remosaic EX mode in case of upper x2 zoom,
+	 * exp & gain reset don't be required.
+	 */
+	if (device->cfg->ex_mode != EX_LOW_RES_TETRA
+		&& sensor_ctrl->force_update == false) {
+		sensor_peri->sensor_interface.cis_itf_ops.request_reset_expo_gain(&sensor_peri->sensor_interface,
+				num_data,
+				&expo.long_val,
+				tgain,
+				&again.long_val,
+				&dgain.long_val);
+	}
 }
 
 void fimc_is_sensor_flash_fire_work(struct work_struct *data)
@@ -810,6 +834,11 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 				ret = fimc_is_sensor_flash_fire(sensor_peri, flash->flash_data.intensity);
 				if (ret) {
 					err("failed to turn off flash at flash expired handler\n");
+#ifdef CONFIG_LEDS_S2MU106_FLASH
+					pdo_ctrl_by_flash(0);
+					muic_afc_set_voltage(9);
+					info("[%s](%d) MAIN Flash ERR: Power Down set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+#endif
 				}
 			} else {
 				flash->flash_ae.main_fls_ae_reset = false;
@@ -834,6 +863,11 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 				err("failed to turn off flash at flash expired handler\n");
 			}
 
+#ifdef CONFIG_LEDS_S2MU106_FLASH
+			pdo_ctrl_by_flash(0);
+			muic_afc_set_voltage(9);
+			info("[%s](%d) MAIN Flash OFF: Power Down set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+#endif
 			flash->flash_ae.main_fls_ae_reset = false;
 			flash->flash_ae.main_fls_strm_on_off_step = 0;
 			flash->flash_ae.frm_num_main_fls[0] = 0;
@@ -1019,6 +1053,51 @@ void fimc_is_sensor_aperture_set_work(struct work_struct *data)
 	info("[%s] end\n", __func__);
 }
 
+void fimc_is_sensor_muic_ctrl_and_flash_fire(struct work_struct *data)
+{
+#ifdef CONFIG_LEDS_S2MU106_FLASH
+	struct fimc_is_flash *flash;
+	struct fimc_is_flash_data *flash_data;
+	struct fimc_is_device_sensor_peri *sensor_peri;
+
+	FIMC_BUG_VOID(!data);
+
+	flash_data = container_of(data, struct fimc_is_flash_data, muic_ctrl_and_flash_fire_work);
+	FIMC_BUG_VOID(!flash_data);
+
+	flash = container_of(flash_data, struct fimc_is_flash, flash_data);
+	FIMC_BUG_VOID(!flash);
+
+	sensor_peri = flash->sensor_peri;
+
+	/* Pre-flash on */
+	if (flash->flash_data.mode == CAM2_FLASH_MODE_TORCH) {
+		muic_afc_set_voltage(5);
+		pdo_ctrl_by_flash(1);
+		info("[%s](%d) Pre-Flash On: Power Down Volatge set(9V -> 5V). \n" ,__func__,__LINE__);
+	}
+
+	info("[%s] pre-flash mode(%d), pow(%d), time(%d)\n", __func__,
+		flash->flash_data.mode,
+		flash->flash_data.intensity, flash->flash_data.firing_time_us);
+
+	/* If pre-flash on failed, set voltage to 9V */
+	if (fimc_is_sensor_flash_fire(sensor_peri, flash->flash_data.intensity)) {
+		err("failed to turn off flash at flash expired handler\n");
+		if(flash->flash_data.mode == CAM2_FLASH_MODE_TORCH) {
+			pdo_ctrl_by_flash(0);
+			muic_afc_set_voltage(9);
+			info("[%s](%d) Pre-Flash ERR: Power Down Volatge set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+		}
+	}
+	else if (flash->flash_data.mode == CAM2_FLASH_MODE_OFF) { /* Torch off - used only in Video Mode */
+		pdo_ctrl_by_flash(0);
+		muic_afc_set_voltage(9);
+		info("[%s](%d) Pre-Flash OFF: Power Down Volatge set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+	}
+#endif
+}
+
 int fimc_is_sensor_flash_fire(struct fimc_is_device_sensor_peri *device,
 				u32 on)
 {
@@ -1186,7 +1265,7 @@ int fimc_is_sensor_peri_notify_vsync(struct v4l2_subdev *subdev, void *arg)
 	}
 
 	/* Sensor Long Term Exposure mode(LTE mode) set */
-	if (cis->long_term_mode.sen_strm_off_on_enable) {
+	if (cis->long_term_mode.sen_strm_off_on_enable && cis->lte_work_enable) {
 		if ((cis->long_term_mode.frame_interval == cis->long_term_mode.frm_num_strm_off_on_interval) ||
 				(cis->long_term_mode.frame_interval <= 0)) {
 			schedule_work(&sensor_peri->cis.long_term_mode_work);
@@ -1395,10 +1474,14 @@ int fimc_is_sensor_peri_pre_flash_fire(struct v4l2_subdev *subdev, void *arg)
 		flash->flash_data.intensity = flash_uctl->firingPower;
 		flash->flash_data.firing_time_us = flash_uctl->firingTime;
 
+#ifdef CONFIG_LEDS_S2MU106_FLASH
+		schedule_work(&sensor_peri->flash->flash_data.muic_ctrl_and_flash_fire_work);
+#else
 		info("[%s](%d) pre-flash mode(%d), pow(%d), time(%d)\n", __func__,
 			vsync_count, flash->flash_data.mode,
 			flash->flash_data.intensity, flash->flash_data.firing_time_us);
 		ret = fimc_is_sensor_flash_fire(sensor_peri, flash->flash_data.intensity);
+#endif
 	}
 
 	/* HACK: reset uctl */
@@ -1699,6 +1782,7 @@ void fimc_is_sensor_peri_init_work(struct fimc_is_device_sensor_peri *sensor_per
 	if (sensor_peri->flash) {
 		INIT_WORK(&sensor_peri->flash->flash_data.flash_fire_work, fimc_is_sensor_flash_fire_work);
 		INIT_WORK(&sensor_peri->flash->flash_data.flash_expire_work, fimc_is_sensor_flash_expire_work);
+		INIT_WORK(&sensor_peri->flash->flash_data.muic_ctrl_and_flash_fire_work, fimc_is_sensor_muic_ctrl_and_flash_fire);
 	}
 
 	INIT_WORK(&sensor_peri->cis.cis_status_dump_work, fimc_is_sensor_cis_status_dump_work);
@@ -1905,6 +1989,23 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 		ret = CALL_CISOPS(cis, cis_stream_off, subdev_cis);
 		if (ret == 0)
 			ret = CALL_CISOPS(cis, cis_wait_streamoff, subdev_cis);
+
+		if (cis->long_term_mode.sen_strm_off_on_enable) {
+			cis->long_term_mode.sen_strm_off_on_enable = 0;
+			ret = CALL_CISOPS(cis, cis_set_long_term_exposure, subdev_cis);
+			info("[%s] stopped long_exp_capture mode\n", __func__);
+
+			for (i = 0; i < 2; i++) {
+				cis->long_term_mode.expo[i] = 0;
+				cis->long_term_mode.tgain[i] = 0;
+				cis->long_term_mode.again[i] = 0;
+				cis->long_term_mode.dgain[i] = 0;
+			}
+			cis->long_term_mode.sen_strm_off_on_step = 0;
+			cis->long_term_mode.frm_num_strm_off_on_interval = 0;
+			cis->long_term_mode.lemode_set.lemode = 0;
+		}
+
 		mutex_unlock(&cis->control_lock);
 
 #ifdef USE_OIS_SLEEP_MODE
@@ -1927,14 +2028,26 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 			mutex_lock(&cis->control_lock);
 			sensor_peri->flash->flash_data.mode = CAM2_FLASH_MODE_OFF;
 			if (sensor_peri->flash->flash_data.flash_fired == true) {
+				sensor_peri->flash->flash_data.intensity = 0;
+				sensor_peri->flash->flash_data.firing_time_us = 0;
+
+				info("[%s] Flash OFF(%d), pow(%d), time(%d)\n",
+					__func__,
+					sensor_peri->flash->flash_data.mode,
+					sensor_peri->flash->flash_data.intensity,
+					sensor_peri->flash->flash_data.firing_time_us);
+
 				ret = fimc_is_sensor_flash_fire(sensor_peri, 0);
 				if (ret) {
 					err("failed to turn off flash at flash expired handler\n");
 				}
+
+				sensor_peri->flash->flash_ae.pre_fls_ae_reset = false;
+				sensor_peri->flash->flash_ae.frm_num_pre_fls = 0;
 #if defined(CONFIG_LEDS_S2MU106_FLASH)
 				pdo_ctrl_by_flash(0);
 				muic_afc_set_voltage(9);
-				info("[%s]%d Down Volatge set Clear \n" ,__func__,__LINE__);
+				info("[%s]%d Down Voltage set Clear \n" ,__func__,__LINE__);
 #endif
 			}
 			mutex_unlock(&cis->control_lock);

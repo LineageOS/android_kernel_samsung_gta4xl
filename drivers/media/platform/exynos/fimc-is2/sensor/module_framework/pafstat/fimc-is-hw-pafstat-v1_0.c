@@ -359,6 +359,14 @@ int pafstat_hw_com_s_med_line(void __iomem *base_reg, int dist_pd_pixel)
 	return med_line;
 }
 
+#ifdef USE_PDAF_MED_LINE_RESET
+void pafstat_hw_com_reset_med_line(void __iomem *base_reg, int dist_pd_pixel)
+{
+	fimc_is_hw_set_reg(base_reg,
+			&pafstat_regs[PAFSTAT_R_CTX_LINE_NUM_MED_INT], 0);
+}
+#endif
+
 /* PAF RDMA */
 void fimc_is_hw_paf_oneshot_enable(void __iomem *base_reg)
 {

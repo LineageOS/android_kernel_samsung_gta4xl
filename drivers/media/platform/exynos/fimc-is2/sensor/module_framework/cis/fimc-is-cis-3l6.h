@@ -16,8 +16,13 @@
 
 #define EXT_CLK_Mhz (26)
 
+#ifdef USE_3L6B_SETFILE
+#define SENSOR_3L6_MAX_WIDTH		(4000)
+#define SENSOR_3L6_MAX_HEIGHT		(3000)
+#else
 #define SENSOR_3L6_MAX_WIDTH		(4128)
 #define SENSOR_3L6_MAX_HEIGHT		(3096)
+#endif
 
 /* TODO: Check below values are valid */
 #define SENSOR_3L6_FINE_INTEGRATION_TIME_MIN                0x1C5
@@ -27,6 +32,7 @@
 
 #define USE_GROUP_PARAM_HOLD	(0)
 
+#ifndef USE_3L6B_SETFILE
 /*Apply the same order as in fimc-is-cis-3l6-setX.h file*/
 enum sensor_mode_enum {
 	SENSOR_3L6_MODE_4128x3096_30FPS,
@@ -36,6 +42,7 @@ enum sensor_mode_enum {
 	SENSOR_3L6_MODE_1280x720_120FPS,
 	SENSOR_3L6_MODE_1024x768_120FPS,
 };
+#endif
 
 #endif
 

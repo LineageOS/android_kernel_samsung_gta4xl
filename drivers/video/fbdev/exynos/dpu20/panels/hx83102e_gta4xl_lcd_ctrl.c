@@ -274,6 +274,7 @@ static int hx83102e_init(struct lcd_info *lcd)
 	DSI_WRITE(SEQ_SET_E9_OTP_SETTING, ARRAY_SIZE(SEQ_SET_E9_OTP_SETTING));
 	DSI_WRITE(SEQ_SET_BB_OTP_SETTING, ARRAY_SIZE(SEQ_SET_BB_OTP_SETTING));
 	DSI_WRITE(SEQ_SET_E9_OTP_SETTING2, ARRAY_SIZE(SEQ_SET_E9_OTP_SETTING2));
+	DSI_WRITE(SEQ_SET_BA_REGISTER, ARRAY_SIZE(SEQ_SET_BA_REGISTER));
 	DSI_WRITE(SEQ_HX83102E_BL, ARRAY_SIZE(SEQ_HX83102E_BL));
 	DSI_WRITE(SEQ_HX83102E_BLON, ARRAY_SIZE(SEQ_HX83102E_BLON));
 	DSI_WRITE(SEQ_HX83102E_BL_PWM_PREQ, ARRAY_SIZE(SEQ_HX83102E_BL_PWM_PREQ));
@@ -375,8 +376,7 @@ static int fb_notifier_callback(struct notifier_block *self,
 
 		msleep(30);	/* > 20ms */
 		dsim_panel_set_brightness(lcd, 1);
-	}
-	else if (fb_blank == FB_BLANK_POWERDOWN) {
+	} else if (fb_blank == FB_BLANK_POWERDOWN) {
 #if defined(CONFIG_SEC_AOT)
 		if (decon_is_enter_shutdown(decon) || !aot_enabled)
 			hx83102e_power_disable(lcd);
@@ -410,6 +410,23 @@ static int hx83102e_probe(struct lcd_info *lcd)
 	dev_info(&lcd->ld->dev, "- %s\n", __func__);
 
 	return 0;
+}
+
+static void hx83102e_update_dphy_timing(u32 hs_clk, struct dphy_timing_value *t)
+{
+	int val;
+
+	val  = (dphy_timing[0][0] - hs_clk) / 10;
+
+	dphy_timing[val][1] = t->clk_prepare;
+	dphy_timing[val][2] = t->clk_zero;
+	dphy_timing[val][3] = t->clk_post;
+	dphy_timing[val][4] = t->clk_trail;
+	dphy_timing[val][5] = t->hs_prepare;
+	dphy_timing[val][6] = t->hs_zero;
+	dphy_timing[val][7] = t->hs_trail;
+	dphy_timing[val][8] = t->lpx;
+	dphy_timing[val][9] = t->hs_exit;
 }
 
 static ssize_t lcd_type_show(struct device *dev,
@@ -507,11 +524,44 @@ static ssize_t cabc_store(struct device *dev,
 	return size;
 }
 
+static ssize_t abnormal_temperature_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	struct lcd_info *lcd = dev_get_drvdata(dev);
+	unsigned int value;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &value);
+
+	if (ret < 0)
+		return ret;
+
+	if ((cpu_to_be32(lcd->id_info.value) != 0x0CD234))
+		return size;
+
+	if (value == 1) {
+		DSI_WRITE(SEQ_SET_B9_PW, ARRAY_SIZE(SEQ_SET_B9_PW));
+		DSI_WRITE(SEQ_SET_B1_POWER_LOW_TEMP, ARRAY_SIZE(SEQ_SET_B1_POWER_LOW_TEMP));
+		DSI_WRITE(SEQ_SET_B9_CLOSE_PW, ARRAY_SIZE(SEQ_SET_B9_CLOSE_PW));
+		dev_info(&lcd->ld->dev, "%s: change VGH voltage to 17.4V \n", __func__);
+	} else {
+		DSI_WRITE(SEQ_SET_B9_PW, ARRAY_SIZE(SEQ_SET_B9_PW));
+		DSI_WRITE(SEQ_SET_B1_POWER, ARRAY_SIZE(SEQ_SET_B1_POWER));
+		DSI_WRITE(SEQ_SET_B9_CLOSE_PW, ARRAY_SIZE(SEQ_SET_B9_CLOSE_PW));
+		dev_info(&lcd->ld->dev, "%s: change VGH voltage to 16.0V \n", __func__);
+	}
+
+	dev_info(&lcd->ld->dev, "%s: %d\n", __func__, value);
+
+	return size;
+}
+
 static DEVICE_ATTR(lcd_type, 0444, lcd_type_show, NULL);
 static DEVICE_ATTR(window_type, 0444, window_type_show, NULL);
 static DEVICE_ATTR(brightness_table, 0444, brightness_table_show, NULL);
 static DEVICE_ATTR(lux, 0644, lux_show, lux_store);
 static DEVICE_ATTR(cabc, 0644, NULL, cabc_store);
+static DEVICE_ATTR(abnormal_temperature, 0644, NULL, abnormal_temperature_store);
 
 static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_lcd_type.attr,
@@ -519,6 +569,7 @@ static struct attribute *lcd_sysfs_attributes[] = {
 	&dev_attr_brightness_table.attr,
 	&dev_attr_lux.attr,
 	&dev_attr_cabc.attr,
+	&dev_attr_abnormal_temperature.attr,
 	NULL,
 };
 
@@ -541,6 +592,7 @@ static int dsim_panel_probe(struct dsim_device *dsim)
 {
 	int ret = 0;
 	struct lcd_info *lcd;
+	struct dphy_timing_value t = {0, };
 
 	dsim->priv.par = lcd = kzalloc(sizeof(struct lcd_info), GFP_KERNEL);
 	if (!lcd) {
@@ -569,6 +621,19 @@ static int dsim_panel_probe(struct dsim_device *dsim)
 	ret = hx83102e_probe(lcd);
 	if (ret < 0)
 		dev_info(&lcd->ld->dev, "%s: failed to probe panel\n", __func__);
+
+	/* custom dphy timing for hs_clk 1030 MHz*/
+	t.clk_prepare = 10;
+	t.clk_zero = 16;
+	t.clk_post = 7;
+	t.clk_trail = 6;
+	t.hs_prepare = 9;
+	t.hs_zero = 6;
+	t.hs_trail = 10;
+	t.lpx = 6;
+	t.hs_exit = 6;
+
+	hx83102e_update_dphy_timing(dsim->clks.hs_clk, &t);
 
 	lcd_init_sysfs(lcd);
 	dev_info(&lcd->ld->dev, "%s: %s: done\n", kbasename(__FILE__), __func__);
@@ -667,7 +732,6 @@ static irqreturn_t panel_conn_det_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-#if defined(CONFIG_SEC_FACTORY)
 static ssize_t conn_det_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -715,11 +779,11 @@ static ssize_t conn_det_store(struct device *dev,
 }
 
 static DEVICE_ATTR(conn_det, 0644, conn_det_show, conn_det_store);
-#endif
 
 static void panel_conn_register(struct lcd_info *lcd)
 {
 	struct decon_device *decon = get_decon_drvdata(0);
+	struct abd_protect *abd = &decon->abd;
 	int gpio = 0, gpio_active = 0;
 
 	if (!decon) {
@@ -744,11 +808,6 @@ static void panel_conn_register(struct lcd_info *lcd)
 		return;
 	}
 
-#if defined(CONFIG_SEC_FACTORY)
-	decon_abd_con_register(decon);
-	device_create_file(&lcd->ld->dev, &dev_attr_conn_det);
-#endif
-
 	INIT_WORK(&lcd->conn_work, panel_conn_work);
 
 	lcd->conn_workqueue = create_singlethread_workqueue("lcd_conn_workqueue");
@@ -757,7 +816,13 @@ static void panel_conn_register(struct lcd_info *lcd)
 		return;
 	}
 
-	decon_abd_pin_register_handler(gpio_to_irq(gpio), panel_conn_det_handler, lcd);
+	decon_abd_pin_register_handler(abd, gpio_to_irq(gpio), panel_conn_det_handler, lcd);
+
+	if (!IS_ENABLED(CONFIG_SEC_FACTORY))
+		return;
+
+	decon_abd_con_register(abd);
+	device_create_file(&lcd->ld->dev, &dev_attr_conn_det);
 }
 
 static int match_dev_name(struct device *dev, void *data)

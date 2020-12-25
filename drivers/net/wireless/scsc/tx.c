@@ -326,7 +326,7 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 				SLSI_NET_WARN(dev, "no fcq for groupcast, drop Tx frame\n");
 				/* Free the local copy here ..if any */
 				if (original_skb)
-					slsi_kfree_skb(skb);
+					consume_skb(skb);
 				return ret;
 			}
 			ret = scsc_wifi_transmit_frame(&sdev->hip4_inst, false, skb);
@@ -336,7 +336,7 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 				 * been freed downstream
 				 */
 				if (original_skb)
-					slsi_kfree_skb(original_skb);
+					consume_skb(original_skb);
 				return ret;
 			} else if (ret < 0) {
 				/* scsc_wifi_transmit_frame failed, decrement BoT counters */
@@ -347,11 +347,11 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 							   (cb->colour & 0xE) >> 1,
 							   (cb->colour & 0xF0) >> 4);
 				if (original_skb)
-					slsi_kfree_skb(skb);
+					consume_skb(skb);
 				return ret;
 			}
 			if (original_skb)
-				slsi_kfree_skb(skb);
+				consume_skb(skb);
 			return -EIO;
 		}
 	}
@@ -362,7 +362,7 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 		slsi_spinlock_unlock(&ndev_vif->peer_lock);
 		SLSI_NET_WARN(dev, "no peer record for %pM, drop Tx frame\n", eth_hdr(skb)->h_dest);
 		if (original_skb)
-			slsi_kfree_skb(skb);
+			consume_skb(skb);
 		return -EINVAL;
 	}
 	/**
@@ -442,7 +442,7 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 		SLSI_NET_WARN(dev, "no fcq for %pM, drop Tx frame\n", eth_hdr(skb)->h_dest);
 		slsi_spinlock_unlock(&ndev_vif->peer_lock);
 		if (original_skb)
-			slsi_kfree_skb(skb);
+			consume_skb(skb);
 		return ret;
 	}
 
@@ -461,19 +461,19 @@ int slsi_tx_data(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *
 		if (ret == -ENOSPC) {
 			slsi_spinlock_unlock(&ndev_vif->peer_lock);
 			if (original_skb)
-				slsi_kfree_skb(skb);
+				consume_skb(skb);
 			return ret;
 		}
 		slsi_spinlock_unlock(&ndev_vif->peer_lock);
 		if (original_skb)
-			slsi_kfree_skb(skb);
+			consume_skb(skb);
 		return -EIO;
 	}
 	/* Frame has been successfully sent, and freed by lower layers */
 	slsi_spinlock_unlock(&ndev_vif->peer_lock);
 	/* What about the original if we passed in a copy ? */
 	if (original_skb)
-		slsi_kfree_skb(original_skb);
+		consume_skb(original_skb);
 	peer->sinfo.tx_bytes += len;
 	return ret;
 }

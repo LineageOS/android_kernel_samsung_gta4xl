@@ -41,6 +41,8 @@
 #include <linux/usb/of.h>
 #include <linux/usb/otg.h>
 
+#include <linux/usb_notify.h>
+
 #include "core.h"
 #include "otg.h"
 #include "gadget.h"
@@ -71,8 +73,26 @@ int dwc3_set_vbus_current(int state)
 static void dwc3_exynos_set_vbus_current_work(struct work_struct *w)
 {
 	struct dwc3 *dwc = container_of(w, struct dwc3, set_vbus_current_work);
-
+	struct otg_notify *o_notify = get_otg_notify();
+	
+	switch (dwc->vbus_current) {
+	case USB_CURRENT_SUSPENDED:
+	/* set vbus current for suspend state is called in usb_notify. */
+		send_otg_notify(o_notify, NOTIFY_EVENT_USBD_SUSPEND, 1);
+		goto skip;
+	case USB_CURRENT_UNCONFIGURED:
+		send_otg_notify(o_notify, NOTIFY_EVENT_USBD_UNCONFIGURE, 1);
+		break;
+	case USB_CURRENT_HIGH_SPEED:
+	case USB_CURRENT_SUPER_SPEED:
+		send_otg_notify(o_notify, NOTIFY_EVENT_USBD_CONFIGURE, 1);
+		break;
+	default:
+		break;
+	}
 	dwc3_set_vbus_current(dwc->vbus_current);
+skip:
+	return;
 }
 /* -------------------------------------------------------------------------- */
 

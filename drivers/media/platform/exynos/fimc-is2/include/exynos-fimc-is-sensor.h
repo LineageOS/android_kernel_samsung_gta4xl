@@ -124,6 +124,7 @@ enum exynos_sensor_id {
 	SENSOR_NAME_S5K2X5		 = 60,
 	SENSOR_NAME_S5KGM2		 = 61,
 	SENSOR_NAME_S5KGW1		 = 62,
+	SENSOR_NAME_S5KGD1		 = 63,
 
 	/* 101~200: SONY sensors */
 	SENSOR_NAME_IMX135		 = 101,
@@ -146,6 +147,9 @@ enum exynos_sensor_id {
 	SENSOR_NAME_IMX471		 = 118,
 	SENSOR_NAME_IMX582		 = 120,
 	SENSOR_NAME_IMX616		 = 121,
+	SENSOR_NAME_IMX518		 = 122,
+	SENSOR_NAME_IMX686		 = 123,
+	SENSOR_NAME_IMX682		 = 124,
 
 	/* 201~255: Other vendor sensors */
 	SENSOR_NAME_SR261		 = 201,
@@ -160,6 +164,8 @@ enum exynos_sensor_id {
 	SENSOR_NAME_GC5035		 = 210,
 	SENSOR_NAME_HI1336		 = 211,
 	SENSOR_NAME_HI1631		 = 213,
+	SENSOR_NAME_HI2021Q		 = 214,
+
 
 	/* 256~: currently not used */
 	SENSOR_NAME_CUSTOM		 = 301,
@@ -217,6 +223,7 @@ enum flash_drv_name {
 	FLADRV_NAME_DRV_FLASH_GPIO	= 11, /* Common Gpio type(Flash mode, Movie/torch mode) */
 	FLADRV_NAME_LM3644		= 12,
 	FLADRV_NAME_DRV_FLASH_I2C	= 13, /* Common I2C type */
+	FLADRV_NAME_S2MU106		= 14,
 	FLADRV_NAME_RT8547		= 16,
 
 	FLADRV_NAME_END,
@@ -277,6 +284,10 @@ enum sensor_retention_state
 	SENSOR_RETENTION_INACTIVE = 1,
 	SENSOR_RETENTION_ACTIVATED = 2,
 };
+
+/* sensor_module_tyoe */
+#define SENSOR_TYPE_RGB		0
+#define SENSOR_TYPE_MONO		1
 
 struct i2c_type {
 	u32 channel;

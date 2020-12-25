@@ -130,7 +130,7 @@ int fimc_is_search_sensor_module_with_position(struct fimc_is_device_sensor *dev
 			goto p_err;
 		}
 
-		if ((*module)->sensor_id == sensor_id)
+		if ((*module)->sensor_id == sensor_id && (*module)->position == position)
 			break;
 	}
 

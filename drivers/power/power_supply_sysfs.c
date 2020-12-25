@@ -51,7 +51,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"SMART_OTG", "SMART_NOTG", "POWER_SHARING",
 		"HV_Mains", "HV_Mains_12V", "HV_Prepare_Mains", "HV_ERR", "MHL_USB_100", "MHL_2000",
 		"HV_Unknown", "MDOCK_TA", "HMT_CONNECTED", "HMT_CHARGE", "Wireless_Pack", "Wireless_Pack_TA",
-		"Wireless_Stand", "HV_Wireless_Stand", "PDIC", "HV_Mains_CHG_LIMIT"
+		"Wireless_Stand", "HV_Wireless_Stand", "PDIC", "HV_Mains_CHG_LIMIT","QC_20","QC_30","Pogo"
 	};
 	static char *status_text[] = {
 		"Unknown", "Charging", "Discharging", "Not charging", "Full"
@@ -164,7 +164,6 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(voltage_boot),
 	POWER_SUPPLY_ATTR(input_voltage_regulation),
 	POWER_SUPPLY_ATTR(current_max),
-	POWER_SUPPLY_ATTR(input_current_max),
 	POWER_SUPPLY_ATTR(current_now),
 	POWER_SUPPLY_ATTR(current_avg),
 	POWER_SUPPLY_ATTR(current_full),
@@ -206,8 +205,6 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(temp_min),
 	POWER_SUPPLY_ATTR(temp_alert_min),
 	POWER_SUPPLY_ATTR(temp_alert_max),
-	POWER_SUPPLY_ATTR(temp_cool),
-	POWER_SUPPLY_ATTR(temp_warm),
 	POWER_SUPPLY_ATTR(temp_ambient),
 	POWER_SUPPLY_ATTR(temp_ambient_alert_min),
 	POWER_SUPPLY_ATTR(temp_ambient_alert_max),
@@ -217,22 +214,41 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(time_to_full_avg),
 	POWER_SUPPLY_ATTR(type),
 	POWER_SUPPLY_ATTR(scope),
+	POWER_SUPPLY_ATTR(precharge_current),
 	POWER_SUPPLY_ATTR(charge_term_current),
 	POWER_SUPPLY_ATTR(calibrate),
-	/* Properties of type `const char *' */
-	POWER_SUPPLY_ATTR(system_temp_level),
-	POWER_SUPPLY_ATTR(resistance),
 	/* Local extensions */
+	POWER_SUPPLY_ATTR(usb_hc),
 	POWER_SUPPLY_ATTR(usb_otg),
 	POWER_SUPPLY_ATTR(charge_enabled),
+	POWER_SUPPLY_ATTR(usbpd_reset),
+	POWER_SUPPLY_ATTR(fuelgauge_reset),
 	/* Local extensions of type int64_t */
 	POWER_SUPPLY_ATTR(charge_counter_ext),
 	/* Properties of type `const char *' */
+	POWER_SUPPLY_ATTR(model_name),
 	POWER_SUPPLY_ATTR(manufacturer),
 	POWER_SUPPLY_ATTR(serial_number),
 	POWER_SUPPLY_ATTR(afc_charger_mode),
-	POWER_SUPPLY_ATTR(usb_hc),
-	POWER_SUPPLY_ATTR(model_name),
+	POWER_SUPPLY_ATTR(tdie),
+	POWER_SUPPLY_ATTR(fast_iavg),
+	POWER_SUPPLY_ATTR(soh),
+	POWER_SUPPLY_ATTR(factory_mode),
+	POWER_SUPPLY_ATTR(vchgin),
+	POWER_SUPPLY_ATTR(vwcin),
+	POWER_SUPPLY_ATTR(vbyp),
+	POWER_SUPPLY_ATTR(vsys),
+	POWER_SUPPLY_ATTR(vbat),
+	POWER_SUPPLY_ATTR(vgpadc),
+	POWER_SUPPLY_ATTR(vcc1),
+	POWER_SUPPLY_ATTR(vcc2),
+	POWER_SUPPLY_ATTR(ichgin),
+	POWER_SUPPLY_ATTR(iwcin),
+	POWER_SUPPLY_ATTR(iotg),
+	POWER_SUPPLY_ATTR(itx),
+	POWER_SUPPLY_ATTR(co_enable),
+	POWER_SUPPLY_ATTR(rr_enable),
+	POWER_SUPPLY_ATTR(pm_factory),
 };
 
 static struct attribute *

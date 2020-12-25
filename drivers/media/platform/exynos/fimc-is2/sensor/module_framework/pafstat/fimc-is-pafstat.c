@@ -172,6 +172,7 @@ static irqreturn_t fimc_is_isr_pafstat(int irq, void *data)
 		/* TODO: recovery */
 #ifdef ENABLE_FULLCHAIN_OVERFLOW_RECOVERY
 		fimc_is_hw_overflow_recovery();
+		err_intr_flag = false;
 #endif
 	}
 #if 0 /* TODO */
@@ -338,6 +339,9 @@ int pafstat_hw_set_regs(struct v4l2_subdev *subdev,
 	int i;
 	struct fimc_is_pafstat *pafstat;
 	struct fimc_is_module_enum *module;
+#ifdef USE_PDAF_MED_LINE_RESET
+	struct fimc_is_device_sensor *sensor = NULL;
+#endif
 	int med_line;
 	int sensor_mode;
 	int distance_pd_pixel;
@@ -384,6 +388,20 @@ int pafstat_hw_set_regs(struct v4l2_subdev *subdev,
 	}
 
 	med_line = pafstat_hw_com_s_med_line(pafstat->regs, distance_pd_pixel);
+#ifdef USE_PDAF_MED_LINE_RESET
+	sensor = (struct fimc_is_device_sensor *)v4l2_get_subdev_hostdata(module->subdev);
+	if (!sensor) {
+		err("device_sensor is null");
+		return -ENODEV;
+	}
+
+	if (med_line >= sensor->cfg->height) {
+		dbg_pafstat(1, "SensorPD mode(%d), pafstat->in_height(%d), MED LINE_NUM(%d)\n",
+			sensor_mode, pafstat->in_height, med_line);
+		pafstat_hw_com_reset_med_line(pafstat->regs, distance_pd_pixel);
+		atomic_add(pafstat->fro_cnt, &pafstat->fe_img);
+	}
+#endif
 	dbg_pafstat(1, "SensorPD mode(%d), distance_pd(%d), MED LINE_NUM(%d)\n",
 		sensor_mode, distance_pd_pixel, med_line);
 
@@ -765,8 +783,6 @@ int fimc_is_pafstat_reset_recovery(struct v4l2_subdev *subdev, u32 reset_mode, i
 {
 	int ret = 0;
 	struct fimc_is_pafstat *pafstat;
-	struct v4l2_subdev_pad_config *cfg = NULL;
-	struct v4l2_subdev_format *fmt = NULL;
 
 	pafstat = v4l2_get_subdevdata(subdev);
 	if (!pafstat) {
@@ -778,7 +794,25 @@ int fimc_is_pafstat_reset_recovery(struct v4l2_subdev *subdev, u32 reset_mode, i
 		pafstat_hw_com_s_output_mask(pafstat->regs_com, 1);
 		pafstat_hw_sw_reset(pafstat->regs);
 	} else {
-		pafstat_s_format(subdev, cfg, fmt);
+		struct v4l2_subdev_pad_config *cfg = NULL;
+		struct v4l2_subdev_format fmt;
+		struct fimc_is_module_enum *module;
+
+		module = (struct fimc_is_module_enum *)v4l2_get_subdev_hostdata(subdev);
+		if (!module) {
+			err("[PAFSTAT:%d] A host data of PAFSTAT is null", pafstat->id);
+			return -ENODEV;
+		}
+
+		if (!module->cfg) {
+			err("module->cfg is NULL");
+			return -EINVAL;
+		}
+
+		fmt.format.width = module->cfg->width;
+		fmt.format.height = module->cfg->height;
+
+		pafstat_s_format(subdev, cfg, &fmt);
 		pafstat_s_stream(subdev, 1);
 		pafstat_hw_com_s_output_mask(pafstat->regs_com, 0);
 	}

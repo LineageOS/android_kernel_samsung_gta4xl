@@ -41,6 +41,9 @@
 #elif defined(CONFIG_CAMERA_MMS_V31)
 #include "fimc-is-vendor-config_mms_v31.h"
 #include "fimc-is-vendor-sensor-pwr_mms_v31.h"
+#elif defined(CONFIG_CAMERA_MMS_V31S)
+#include "fimc-is-vendor-config_mms_v31s.h"
+#include "fimc-is-vendor-sensor-pwr_mms_v31s.h"
 #elif defined(CONFIG_CAMERA_XXS_VPRO)
 #include "fimc-is-vendor-config_xxs_vpro.h"
 #include "fimc-is-vendor-sensor-pwr_xxs_vpro.h"

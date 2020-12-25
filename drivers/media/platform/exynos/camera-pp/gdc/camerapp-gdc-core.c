@@ -706,7 +706,7 @@ static int gdc_vb2_queue_setup(struct vb2_queue *vq,
 		alloc_devs[i] = ctx->gdc_dev->dev;
 	}
 
-	return vb2_queue_init(vq);
+	return 0;
 }
 
 static int gdc_vb2_buf_prepare(struct vb2_buffer *vb)
@@ -1239,20 +1239,19 @@ static irqreturn_t gdc_irq_handler(int irq, void *priv)
 				GDC_INT_OK(irq_status) ?
 				VB2_BUF_STATE_DONE : VB2_BUF_STATE_ERROR);
 
-		if (test_bit(DEV_SUSPEND, &gdc->state)) {
-			gdc_dbg("wake up blocked process by suspend\n");
-			wake_up(&gdc->wait);
-		} else {
-			v4l2_m2m_job_finish(gdc->m2m.m2m_dev, ctx->m2m_ctx);
-		}
-
 		/* Wake up from CTX_ABORT state */
-		if (test_and_clear_bit(CTX_ABORT, &ctx->flags))
-			wake_up(&gdc->wait);
+		clear_bit(CTX_ABORT, &ctx->flags);
 
 		spin_lock(&gdc->ctxlist_lock);
 		gdc->current_ctx = NULL;
 		spin_unlock(&gdc->ctxlist_lock);
+
+		if (test_bit(DEV_SUSPEND, &gdc->state))
+			gdc_dbg("wake up blocked process by suspend\n");
+		else
+			v4l2_m2m_job_finish(gdc->m2m.m2m_dev, ctx->m2m_ctx);
+
+		wake_up(&gdc->wait);
 	}
 
 	spin_unlock(&gdc->slock);

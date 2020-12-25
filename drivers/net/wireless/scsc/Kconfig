@@ -245,7 +245,7 @@ config SCSC_WLAN_SET_PREFERRED_ANTENNA
 
 config SLSI_WLAN_STA_FWD_BEACON
         bool "Forwarding beacon support"
-        default n
+	default y
         ---help---
           This option tells if beacon forwarding in STA mode is enabled or not.
           When it is enabled, Driver deliver beacon info of connected AP to Supplicant.

@@ -879,6 +879,10 @@ static void csi_err_handle(struct fimc_is_device_csi *csi)
 			csis_flush_vc_multibuf(csi, vc);
 			err("[F%d][VC%d] frame was done with error", atomic_read(&csi->fcount), vc);
 			set_bit((CSIS_BUF_ERR_VC0 + vc), &csi->state);
+#if defined(ENABLE_CSIS_ERR_SENSOR_DUMP) 
+			device = container_of(csi->subdev, struct fimc_is_device_sensor, subdev_csi);
+			fimc_is_sensor_dump(device);
+#endif
 		}
 	}
 

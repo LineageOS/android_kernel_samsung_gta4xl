@@ -822,6 +822,12 @@ int fimc_is_module_parse_dt(struct device *dev,
 	if (internal_vc_np)
 		parse_internal_vc_data(pdata, internal_vc_np);
 
+	ret = of_property_read_u32(dnode, "sensor_module_type", &pdata->sensor_module_type);
+	if (ret) {
+		probe_warn("sensor_module_type read is skipped(%d)", ret);
+		pdata->sensor_module_type = SENSOR_TYPE_RGB;
+	}
+
 	dev->platform_data = pdata;
 
 	return ret;

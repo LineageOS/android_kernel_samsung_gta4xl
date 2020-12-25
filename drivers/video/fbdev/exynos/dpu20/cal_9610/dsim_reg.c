@@ -88,7 +88,7 @@ u32 DSIM_PHY_MD_ANA_CON_VAL[] = {
 
 /* DPHY timing table */
 /* below table have to be changed to meet MK DPHY spec*/
-const u32 dphy_timing[][10] = {
+u32 dphy_timing[][10] = {
 	/* bps, clk_prepare, clk_zero, clk_post, clk_trail,
 	 * hs_prepare, hs_zero, hs_trail, lpx, hs_exit
 	 */
@@ -2133,6 +2133,15 @@ void dsim_reg_set_cmd_transfer_mode(u32 id, u32 lp)
 	u32 val = lp ? ~0 : 0;
 
 	dsim_write_mask(id, DSIM_ESCMODE, val, DSIM_ESCMODE_CMD_LPDT);
+}
+
+u32 dsim_reg_get_vm_line_cnt(u32 id)
+{
+	u32 val;
+
+	val = dsim_read(id, DSIM_LINK_STATUS0);
+
+	return DSIM_LINK_STATUS0_VM_LINE_CNT_GET(val);
 }
 
 void __dsim_dump(u32 id, struct dsim_regs *regs)

@@ -956,7 +956,7 @@ static netdev_tx_t slsi_net_hw_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (!skb) {
 		slsi_wakeunlock(&sdev->wlan_wl);
 		if (original_skb)
-			slsi_kfree_skb(original_skb);
+			consume_skb(original_skb);
 		return NETDEV_TX_OK;
 	}
 #endif
@@ -971,7 +971,7 @@ evaluate:
 		 * upper network layers....if a copy was passed down.
 		 */
 		if (original_skb)
-			slsi_kfree_skb(original_skb);
+			consume_skb(original_skb);
 		/* skb freed by lower layers on success...enjoy */
 
 		ndev_vif->tx_packets[traffic_q]++;
@@ -1005,7 +1005,7 @@ evaluate:
 			ndev_vif->stats.tx_fifo_errors++;
 			/* Free the local copy if any ... */
 			if (original_skb)
-				slsi_kfree_skb(skb);
+				consume_skb(skb);
 			r = NETDEV_TX_BUSY;
 		} else {
 #ifdef CONFIG_SCSC_WLAN_DEBUG
@@ -1015,9 +1015,12 @@ evaluate:
 			WARN_ON(known_users && atomic_read(&skb->users) != known_users);
 #endif
 #endif
-			if (original_skb)
+			if (original_skb) {
+				consume_skb(skb);
 				slsi_kfree_skb(original_skb);
-			slsi_kfree_skb(skb);
+			} else {
+				slsi_kfree_skb(skb);
+			}
 			ndev_vif->stats.tx_dropped++;
 			/* We return the ORIGINAL Error 'r' anyway
 			 * BUT Kernel treats them as TX complete anyway
@@ -2143,7 +2146,7 @@ _forward_now:
 		if (tcp_ack_suppression_monitor && tcp_ack->age)
 			mod_timer(&tcp_ack->timer, jiffies + msecs_to_jiffies(tcp_ack->age));
 		ndev_vif->tcp_ack_stats.tack_suppressed++;
-		slsi_kfree_skb(cskb);
+		consume_skb(cskb);
 	}
 	skb_queue_tail(&tcp_ack->list, skb);
 	tcp_ack->ack_seq = be32_to_cpu(tcp_hdr(skb)->ack_seq);

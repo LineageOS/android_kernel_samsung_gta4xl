@@ -17,11 +17,13 @@
 #include <linux/firmware.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/mm.h>
 
 #include "ssp.h"
 #include "ssp_firmware.h"
+#include "factory/ssp_sensor.h"
 
-enum fw_type 
+enum fw_type
 {
 	FW_TYPE_NONE,
 	FW_TYPE_BIN,
@@ -34,12 +36,12 @@ enum fw_type
 #define UPDATE_BIN_FILE	"shub.bin"
 
 #ifdef SUPPORT_SPU_FW
-#define SPU_FW_FILE	"efs/spu/sensorhub/shub_spu.bin"
+#define SPU_FW_FILE "/spu/sensorhub/shub_spu.bin"
 
 #define FW_VER_LEN 8
 extern long spu_firmware_signature_verify(const char* fw_name, const u8* fw_data, const long fw_size);
 
-static int request_spu_firmware(struct ssp_data *data, u8 *fw_buf)
+static int request_spu_firmware(struct ssp_data *data, u8 **fw_buf)
 {
 	int ret = 0;
 	size_t file_size = 0, remaining;
@@ -52,13 +54,15 @@ static int request_spu_firmware(struct ssp_data *data, u8 *fw_buf)
 	mm_segment_t old_fs = get_fs();
 	set_fs(KERNEL_DS);
 
+	ssp_infof("");
+
 	filp = filp_open(SPU_FW_FILE, O_RDONLY, 0);
 	if(IS_ERR(filp)){
 		ssp_infof("filp_open failed %d", PTR_ERR(filp));
 		set_fs(old_fs);
 		return 0;
 	}
-	
+
 	file_size = filp->f_path.dentry->d_inode->i_size;
 	if(file_size <= 0)
 	{
@@ -66,11 +70,11 @@ static int request_spu_firmware(struct ssp_data *data, u8 *fw_buf)
 		set_fs(old_fs);
 		return 0;
 	}
-	
-	file_buf = kzalloc(file_size, GFP_KERNEL);
+
+	file_buf = kvzalloc(file_size, GFP_KERNEL);
 	if(file_buf == NULL)
 	{
-		ssp_info("file buf kzalloc error");
+		ssp_errf("file buf kvzalloc error");
 		return 0;
 	}
 
@@ -83,7 +87,7 @@ static int request_spu_firmware(struct ssp_data *data, u8 *fw_buf)
 		}
 
 		ret = (unsigned int)vfs_read(filp, (char __user *)(file_buf+offset),
-		                                read_size, &filp->f_pos);
+				read_size, &filp->f_pos);
 
 		if(ret != read_size)
 		{
@@ -100,38 +104,48 @@ static int request_spu_firmware(struct ssp_data *data, u8 *fw_buf)
 	set_fs(old_fs);
 	if (ret < 0) {
 		ssp_errf("file read fail %d", ret);
+		kfree(file_buf);
 		return 0;
 	}
 
 	//check signing
-	fw_size = spu_firmware_signature_verify("SENSORHUB", file_buf, file_size);	
+	fw_size = spu_firmware_signature_verify("SENSORHUB", file_buf, file_size);
 	if(fw_size < 0) {
 		ssp_errf("signature verification failed %d", fw_size);
 		fw_size = 0;
 	} else {
 		u32 fw_version = 0;
+		char str_ver[9] = "";
 
 		ssp_infof("signature verification success %d", fw_size);
 		if(fw_size < FW_VER_LEN)
 		{
 			ssp_errf("fw size is wrong %d", fw_size);
+			kfree(file_buf);
 			return 0;
 		}
-		
-		ret = kstrtou32(file_buf + fw_size - FW_VER_LEN, 10, &fw_version);
-		ssp_infof("urgent fw_version %d kernel ver %d", fw_version, data->curr_fw_rev);
 
-		if(fw_version > data->curr_fw_rev)
+		memcpy(str_ver, file_buf + fw_size - FW_VER_LEN, 8);
+
+		ret = kstrtou32(str_ver, 10, &fw_version);
+		ssp_infof("urgent fw_version %d kernel ver %u", fw_version, get_module_rev(data));
+
+		if(fw_version > get_module_rev(data))
 		{
-			ssp_infof("use sup fw");
 			fw_size -= FW_VER_LEN;
-			fw_buf = kzalloc(fw_size, GFP_KERNEL);
-			memcpy(fw_buf, file_buf, fw_size);
+			ssp_infof("use spu fw size %d", fw_size);
+			*fw_buf = kvzalloc(fw_size, GFP_KERNEL);
+			if(*fw_buf == NULL)
+			{
+				ssp_errf("fw buf kvzalloc error");
+				kfree(file_buf);
+				return 0;
+			}
+			memcpy(*fw_buf, file_buf, fw_size);
 		}
 		else
 			fw_size = 0;
 	}
-
 	kfree(file_buf);
 
 	return (int)fw_size;
@@ -145,11 +159,14 @@ static void release_spu_firmware(struct ssp_data *data, u8 *fw_buf)
 int download_sensorhub_firmware(struct ssp_data *data, struct device* dev, void * addr)
 {
 	int ret = 0;
-	int fw_size;	
+	int fw_size;
 	char* fw_buf = NULL;
 	const struct firmware *entry = NULL;
-	
-#ifdef CONFIG_SSP_ENG_DEBUG	
+
+	if(addr == NULL)
+		return -EINVAL;
+
+#ifdef CONFIG_SSP_ENG_DEBUG
 	ssp_infof("check push bin file");
 	ret = request_firmware(&entry, UPDATE_BIN_FILE, dev);
 	if(!ret)
@@ -161,10 +178,10 @@ int download_sensorhub_firmware(struct ssp_data *data, struct device* dev, void 
 #endif
 	{
 #ifdef SUPPORT_SPU_FW
-		fw_size = request_spu_firmware(data, (char*)fw_buf);
+		fw_size = request_spu_firmware(data, (u8**)&fw_buf);
 		if(fw_size > 0)
 		{
-			ssp_infof("donwload spu firmware");
+			ssp_infof("dowload spu firmware");
 			data->fw_type = FW_TYPE_SPU;
 		}
 		else
@@ -186,8 +203,10 @@ int download_sensorhub_firmware(struct ssp_data *data, struct device* dev, void 
 		}
 	}
 
-	memcpy(addr, fw_buf, fw_size);
 	ssp_infof("fw type %d bin(size:%d) on %lx",data->fw_type, (int)fw_size, (unsigned long)addr);
+
+	memcpy(addr, fw_buf, fw_size);
+
 	if(entry)
 		release_firmware(entry);
 

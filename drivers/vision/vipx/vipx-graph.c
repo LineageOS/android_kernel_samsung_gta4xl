@@ -721,9 +721,8 @@ static void __vipx_graph_cleanup_buffer(struct vipx_graph *graph,
 		return;
 
 	mem = &graph->vctx->core->system->memory;
-	if (buf->mem_attr == VIPX_COMMON_CACHEABLE)
-		mem->mops->sync_for_cpu(mem, buf);
 
+	mem->mops->sync_for_cpu(mem, buf);
 	mem->mops->unmap_dmabuf(mem, buf);
 	kfree(buf);
 	vipx_leave();

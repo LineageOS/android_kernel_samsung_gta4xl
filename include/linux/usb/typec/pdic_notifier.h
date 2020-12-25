@@ -25,6 +25,8 @@
 #ifndef __CCIC_NOTIFIER_H__
 #define __CCIC_NOTIFIER_H__
 
+#include <linux/notifier.h>
+
 /* CCIC notifier call sequence,
  * largest priority number device will be called first.
  * refer Team Docs > ETC > 1. USB Type C >
@@ -61,7 +63,7 @@ typedef enum {
 	CCIC_NOTIFY_ID_ROLE_SWAP 		= 13,
 	CCIC_NOTIFY_ID_FAC 				= 14,
 	CCIC_NOTIFY_ID_CC_PIN_STATUS 	= 15,
-	CCIC_NOTIFY_ID_WATER_CABLE 		= 16,
+	CCIC_NOTIFY_ID_CABLE 			= 16,
 } ccic_notifier_id_t;
 
 typedef struct
@@ -216,7 +218,7 @@ extern int ccic_notifier_unregister(struct notifier_block *nb);
 extern int ccic_notifier_init(void);
 
 #define CCIC_NOTI_DEST_NUM	(12)
-#define CCIC_NOTI_ID_NUM	(15)
+#define CCIC_NOTI_ID_NUM	(17)
 #define CCIC_NOTI_RID_NUM	(8)
 #define CCIC_NOTI_USB_STATUS_NUM (5)
 #define CCIC_NOTI_PIN_STATUS_NUM	(8)

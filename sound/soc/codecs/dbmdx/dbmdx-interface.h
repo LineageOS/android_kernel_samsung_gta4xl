@@ -336,6 +336,8 @@ struct va_flags {
 	bool	microphones_enabled;
 	int	cancel_pm_work;
 	unsigned int	mode;
+	bool	recovery_requested;
+	int	va_debug_val1;
 };
 
 struct vqe_flags {

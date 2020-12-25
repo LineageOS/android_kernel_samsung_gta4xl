@@ -1,16 +1,17 @@
 #ifndef FIMC_IS_EEPROM_REAR4_GC5035_0M31_V001_H
 #define FIMC_IS_EEPROM_REAR4_GC5035_0M31_V001_H
 
-/* Reference File
+/* Reference File (Both files are same)
  * Universal EEPROM map data V001_20191122_for_M31_RAMEN_8K_(GC5035_5M_Macro).xlsx
+ * Universal EEPROM map data V001_20191010_for_A71_5G_NEUS_8K_(GC5035_5M_Macro)_COMMON.xlsx
  */
 
-#define FIMC_IS_REAR4_MAX_CAL_SIZE (8 * 1024)
-#define REAR4_HEADER_CHECKSUM_LEN (0xFB - 0x00 + 0x1)
-#define REAR4_OEM_CHECKSUM_LEN (0x0189 - 0x0100 + 0x1)
-#define REAR4_AWB_CHECKSUM_LEN (0x023B - 0x1C0 + 0x1)
-#define REAR4_SHADING_CHECKSUM_LEN (0x1C4F - 0x0260 + 0x1)
-#define REAR4_AE_CHECKSUM_LEN         (0x1CCF - 0x1C70 + 0x1)
+#define FIMC_IS_REAR4_MAX_CAL_SIZE  (8 * 1024)
+#define REAR4_HEADER_CHECKSUM_LEN   (0xFB - 0x00 + 0x1)
+#define REAR4_OEM_CHECKSUM_LEN      (0x0189 - 0x0100 + 0x1)
+#define REAR4_AWB_CHECKSUM_LEN      (0x023B - 0x1C0 + 0x1)
+#define REAR4_SHADING_CHECKSUM_LEN  (0x1C4F - 0x0260 + 0x1)
+#define REAR4_AE_CHECKSUM_LEN       (0x1CCF - 0x1C70 + 0x1)
 
 struct rom_ae_cal_data rear4_gc5035_ae_cal_info = {
 	.rom_header_main_ae_start_addr  = 0x28,
@@ -51,12 +52,12 @@ const struct fimc_is_vender_rom_addr rear4_gc5035_cal_addr = {
 	.rom_header_main_awb_end_addr               = 0x14,
 	.rom_header_main_shading_start_addr         = 0x18,
 	.rom_header_main_shading_end_addr           = 0x1C,
-	.rom_header_main_sensor_cal_start_addr      = 0x20,
-	.rom_header_main_sensor_cal_end_addr        = 0x24,
-	.rom_header_dual_cal_start_addr             = 0x30,
-	.rom_header_dual_cal_end_addr               = 0x34,
-	.rom_header_pdaf_cal_start_addr             = 0x38,
-	.rom_header_pdaf_cal_end_addr               = 0x3C,
+	.rom_header_main_sensor_cal_start_addr      = -1,
+	.rom_header_main_sensor_cal_end_addr        = -1,
+	.rom_header_dual_cal_start_addr             = -1,
+	.rom_header_dual_cal_end_addr               = -1,
+	.rom_header_pdaf_cal_start_addr             = -1,
+	.rom_header_pdaf_cal_end_addr               = -1,
 
 	.rom_header_sub_oem_start_addr              = -1,
 	.rom_header_sub_oem_end_addr                = -1,
@@ -65,7 +66,7 @@ const struct fimc_is_vender_rom_addr rear4_gc5035_cal_addr = {
 	.rom_header_sub_shading_start_addr          = -1,
 	.rom_header_sub_shading_end_addr            = -1,
 
-	.rom_header_main_mtf_data_addr              = -1,
+	.rom_header_main_mtf_data_addr              = 0x0156,
 	.rom_header_sub_mtf_data_addr               = -1,
 
 	.rom_header_checksum_addr                   = 0xFC,

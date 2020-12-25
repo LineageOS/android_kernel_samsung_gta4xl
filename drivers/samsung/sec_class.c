@@ -30,6 +30,19 @@ struct device *sec_device_create(void *drvdata, const char *fmt)
 }
 EXPORT_SYMBOL(sec_device_create);
 
+static int match_name(struct device *dev, const void *data)
+{
+	const char *name = data;
+
+	return sysfs_streq(name, dev_name(dev));
+}
+struct device *sec_device_find(const char *name)
+{
+	return class_find_device(sec_class, NULL,
+		(void *)name, match_name);
+}
+EXPORT_SYMBOL(sec_device_find);
+
 void sec_device_destroy(dev_t devt)
 {
 	pr_info("%s : %d\n", __func__, devt);

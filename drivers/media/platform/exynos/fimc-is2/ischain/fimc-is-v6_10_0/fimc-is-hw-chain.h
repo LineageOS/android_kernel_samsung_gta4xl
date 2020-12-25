@@ -82,16 +82,19 @@ enum hwip_interrupt_map {
 /* Specific interrupt map belonged to each IP */
 
 /* MC-Scaler */
-#define MCSC_INTR_MASK		(0x0030007C)
-#define USE_DMA_BUFFER_INDEX	(0) /* 0 ~ 7 */
-#define MCSC_PRECISION		(20)
-#define MCSC_POLY_RATIO_UP	(10)
-#define MCSC_POLY_RATIO_DOWN	(16)
-#define MCSC_POST_RATIO_DOWN	(16)
+#define MCSC_INTR_MASK			(0x0030007C)
+#define USE_DMA_BUFFER_INDEX		(0) /* 0 ~ 7 */
+#define MCSC_PRECISION			(20)
+#define MCSC_POLY_RATIO_UP		(12)
+#define MCSC_POLY_QUALITY_RATIO_DOWN	(4)
+#define MCSC_POLY_RATIO_DOWN		(16)
+#define MCSC_POLY_MAX_RATIO_DOWN	(256)
+#define MCSC_POST_RATIO_DOWN		(16)
+#define MCSC_POST_MAX_WIDTH		(1440)
 /* #define MCSC_POST_WA */
-#define MCSC_POST_WA_SHIFT	(8)	/* 256 = 2^8 */
+#define MCSC_POST_WA_SHIFT		(8)	/* 256 = 2^8 */
 
-#define MCSC_OUTPUT_SSB		(0xF)	/* This number has no special meaning. */
+#define MCSC_OUTPUT_SSB			(0xF)	/* This number has no special meaning. */
 
 #define MAX_MCSC_DNR_WIDTH		(5760)
 #define MAX_MCSC_DNR_HEIGHT		(4320)
@@ -112,6 +115,7 @@ enum hwip_interrupt_map {
 #define MCSC_DJAG_IN_CAPTURE_MODE	(DEV_HW_MCSC1)
 #define MCSC_CAC_IN_VIDEO_MODE		(DEV_HW_MCSC0)
 #define MCSC_CAC_IN_CAPTURE_MODE	(DEV_HW_MCSC1)
+#define MCSC_LINE_BUF_SIZE		(5760)
 
 enum mc_scaler_interrupt_map {
 	INTR_MC_SCALER_FRAME_END		= 0,

@@ -270,7 +270,7 @@ static int sensor_module_4ha_power_setpin(struct device *dev,
 			SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON, gpio_camaf_2p8_en, RCAM_AF_VDD, PIN_OUTPUT, 1, 5000);
 		}
 	}
-	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON,  pin_1p8.gpio,     S5K4HA_IOVDD, pin_1p8.type, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON,  pin_1p8.gpio,     S5K4HA_IOVDD, pin_1p8.type, 1, 3000);
 	/* READ_ROM - POWER OFF */
 	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, pin_1p8.gpio,     S5K4HA_IOVDD, pin_1p8.type, 0, 0);
 		if (exist_actuator == true) {

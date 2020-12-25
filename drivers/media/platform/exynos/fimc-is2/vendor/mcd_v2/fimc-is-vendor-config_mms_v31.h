@@ -35,6 +35,7 @@
 //#define SUPPORT_SENSOR_3DHDR                                /* whether capable of 3DHDR or not */
 #undef OVERFLOW_PANIC_ENABLE_CSIS                             /* Not Support Kernel Panic when CSIS OVERFLOW */
 
+#define SUPPORT_FRONT_SM_DVFS                                 /* Support Front SlowMotion at L0 DVFS*/
 
 /***** DDK - DRIVER INTERFACE *****/
 #define USE_AI_CAMERA_INTERFACE     (1)                       /* This feature since A7 2018 */
@@ -60,5 +61,7 @@
 #define CSI_SCENARIO_SEN_FRONT	(1)
 #endif
 
+#define DISABLE_DUAL_SYNC
+#define ENABLE_CSIS_ERR_SENSOR_DUMP                           /* Enable Sensor register dump when CSIS ERROR occurs */                           
 
 #endif /* FIMC_IS_VENDOR_CONFIG_MMS_V31_H */

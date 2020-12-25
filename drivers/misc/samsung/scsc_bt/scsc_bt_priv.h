@@ -240,6 +240,7 @@ struct scsc_bt_service {
 	size_t                         interrupt_count;
 	size_t                         interrupt_read_count;
 	size_t                         interrupt_write_count;
+	size_t                         last_suspend_interrupt_count;
 
 	u32                            mailbox_hci_evt_read;
 	u32                            mailbox_hci_evt_write;
@@ -254,6 +255,9 @@ struct scsc_bt_service {
 	struct scsc_bt_avdtp_detect    avdtp_detect;
 	struct completion              recovery_release_complete;
 	struct completion              recovery_probe_complete;
+	u8                             recovery_level;
+
+	bool                           iq_reports_enabled;
 
 #ifdef CONFIG_SCSC_LOG_COLLECTION
 	struct scsc_bt_hcf_collection  hcf_collection;
@@ -345,6 +349,8 @@ struct scsc_ant_service {
 
 	struct completion              recovery_release_complete;
 	struct completion              recovery_probe_complete;
+	struct completion              release_complete;
+	u8                             recovery_level;
 };
 
 extern struct scsc_ant_service ant_service;

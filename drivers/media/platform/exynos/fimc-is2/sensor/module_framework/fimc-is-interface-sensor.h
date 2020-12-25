@@ -407,6 +407,8 @@ typedef struct {
 #ifdef CAMERA_REAR2_SENSOR_SHIFT_CROP
 	u32				sensor_shifted_num;
 #endif
+
+	u32				frame_length_lines_shifter;
 } cis_shared_data;
 
 struct v4l2_subdev;
@@ -972,6 +974,7 @@ struct fimc_is_cis_ext2_interface_ops {
 	int (*set_sensor_info_mfhdr_mode_change)(struct fimc_is_sensor_interface *itf,
 				u32 count, u32 *long_expo, u32 *long_again, u32 *long_dgain,
 				u32 *expo, u32 *again, u32 *dgain);
+	int (*get_delayed_preflash_time)(struct fimc_is_sensor_interface *itf, u32 *delayedTime);
 	void *reserved[15];
 };
 

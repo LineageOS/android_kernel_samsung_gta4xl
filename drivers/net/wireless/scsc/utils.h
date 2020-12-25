@@ -553,17 +553,53 @@ static inline void slsi_eth_broadcast_addr(u8 *addr)
 static inline int slsi_str_to_int(char *str, int *result)
 {
 	int i = 0;
+	int sign = 1;
+	int err = 0;
+	long long int res = 0;
+	int digit = 0;
+
+	if (!str)
+		return 0;
+	if (*str == '-') {
+		sign = -1;
+		++str;
+	} else if (*str == '+') {
+		sign = 1;
+		++str;
+	}
 
 	*result = 0;
-	if ((str[i] == '-') || ((str[i] >= '0') && (str[i] <= '9'))) {
-		if (str[0] == '-')
-			i++;
+	if ((str[i] >= '0') && (str[i] <= '9')) {
 		while (str[i] >= '0' && str[i] <= '9') {
-			*result *= 10;
-			*result += (int)str[i++] - '0';
+			if (res > INT_MAX / 10) {
+				err = 1;
+				break;
+			}
+			res *= 10;
+			digit = str[i] - '0';
+
+			if (res > INT_MAX - digit) {
+				if (sign == -1) {
+					res += digit;
+					if (-(res) >= INT_MIN) {
+						break;
+					} else {
+						err = 1;
+						break;
+					}
+				} else {
+					err = 1;
+					break;
+				}
+			}
+			res += digit;
+			i++;
 		}
 
-		*result = ((str[0] == '-') ? (-(*result)) : *result);
+		if (!err)
+			*result = ((sign == -1) ? -(res) : res);
+		else
+			return 0;
 	}
 	return i;
 }

@@ -312,6 +312,7 @@ struct sm5713_fuelgauge_data {
 
 	u8 pmic_rev;
 	u8 vender_id;
+	u8 read_reg;
 
 	int cable_type;
 	bool is_charging;
@@ -344,6 +345,7 @@ struct sm5713_fuelgauge_data {
 	int raw_capacity;
 	int current_now;
 	int current_avg;
+	unsigned int ttf_capacity;
 	struct cv_slope *cv_data;
 	int cv_data_lenth;
 

@@ -747,6 +747,8 @@ enum aa_capture_intent {
 	AA_CAPTURE_INTENT_STILL_CAPTURE_LLHDR_VEHDR_DYNAMIC_SHOT,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_VENR_DYNAMIC_SHOT,
 	AA_CAPTURE_INTENT_STILL_CAPTURE_LLS_FLASH,
+	AA_CAPTURE_INTENT_STILL_CAPTURE_CROPPED_REMOSAIC_DYNAMIC_SHOT,
+	AA_CAPTURE_INTENT_STILL_CAPTURE_CROPPED_REMOSAIC_SINGLE,
 };
 
 enum aa_mode {
@@ -819,6 +821,7 @@ enum aa_scene_mode {
 	AA_SCENE_MODE_ILLUMINANCE      = 137,
 	AA_SCENE_MODE_SUPER_NIGHT      = 138,
 	AA_SCENE_MODE_BOKEH_VIDEO      = 139,
+	AA_SCENE_MODE_SINGLE_TAKE      = 140,
 };
 
 enum aa_effect_mode {
@@ -1076,10 +1079,15 @@ enum aa_af_scene_change {
 };
 
 enum aa_enable_dynamicshot {
-    AA_DYNAMICSHOT_SIMPLE = 0,
-    AA_DYNAMICSHOT_FULL,
-    AA_DYNAMICSHOT_HDR_ONLY,
-    AA_DYNAMICSHOT_LLS_ONLY,
+	AA_DYNAMICSHOT_SIMPLE = 0,
+	AA_DYNAMICSHOT_FULL,
+	AA_DYNAMICSHOT_HDR_ONLY,
+	AA_DYNAMICSHOT_LLS_ONLY,
+};
+
+enum aa_night_timelaps_mode {
+	AA_NIGHT_TIMELAPS_MODE_OFF = 0,
+	AA_NIGHT_TIMELAPS_MODE_ON,
 };
 
 struct camera2_aa_ctl {
@@ -1125,7 +1133,9 @@ struct camera2_aa_ctl {
 	float				vendor_expBracketing[15];
 	float				vendor_expBracketingCapture;
 	enum aa_supernightmode		vendor_superNightShotMode;
-	uint32_t			vendor_reserved[7];
+	enum aa_night_timelaps_mode	vendor_nightTimelapsMode;
+	uint32_t			vendor_enableDynamicBds; 
+	uint32_t			vendor_reserved[5];
 };
 
 struct aa_apexInfo {
@@ -1214,9 +1224,10 @@ struct camera2_aa_dm {
 	float				vendor_noiseIndex;
 #ifdef SUPPORT_SENSOR_SEAMLESS_3HDR
 	uint32_t			vendor_3hdrMode; //temporary code for A51
-	uint32_t			vendor_reserved;
+	uint32_t			vendor_dynamicBdsInfo;
 #else
-	uint32_t			vendor_reserved[2];
+	uint32_t			vendor_dynamicBdsInfo;
+	uint32_t			vendor_reserved[1];
 #endif
 
 	// For dual
@@ -1981,15 +1992,23 @@ enum camera_motion_state {
 };
 
 enum camera_client_index {
-	CAMERA_APP_CATEGORY_NOT_READ = -1,
-	CAMERA_APP_CATEGORY_NONE = 0,
-	CAMERA_APP_CATEGORY_FACEBOOK = 1,
-	CAMERA_APP_CATEGORY_WECHAT = 2,
-	CAMERA_APP_CATEGORY_SNAPCHAT = 3,
-	CAMERA_APP_CATEGORY_TWITTER = 4,
-	CAMERA_APP_CATEGORY_INSTAGRAM = 5,
-	CAMERA_APP_CATEGORY_3P_VT = 6,
-	CAMERA_APP_CATEGORY_VAULT = 7,
+	CAMERA_APP_CATEGORY_NOT_READ		= -1,
+	CAMERA_APP_CATEGORY_NONE			= 0,
+	CAMERA_APP_CATEGORY_FACEBOOK		= 1,
+	CAMERA_APP_CATEGORY_WECHAT		= 2,
+	CAMERA_APP_CATEGORY_SNAPCHAT		= 3,
+	CAMERA_APP_CATEGORY_TWITTER		= 4,
+	CAMERA_APP_CATEGORY_INSTAGRAM		= 5,
+	CAMERA_APP_CATEGORY_3P_VT			= 6,
+	CAMERA_APP_CATEGORY_VAULT			= 7,
+	CAMERA_APP_CATEGORY_FACEBOOK_MASSENGER	= 8,
+	CAMERA_APP_CATEGORY_WHATSAPP		= 9,
+	CAMERA_APP_CATEGORY_ULIKE			= 10,
+	CAMERA_APP_CATEGORY_WEIBO			= 11,
+	CAMERA_APP_CATEGORY_MEITU			= 12,
+	CAMERA_APP_CATEGORY_KAKAOBANK		= 13,
+	CAMERA_APP_CATEGORY_CAMCARD		= 14,
+	CAMERA_APP_CATEGORY_CAMCARD_FREE	= 15,
 	CAMERA_APP_CATEGORY_MAX
 };
 
@@ -2181,6 +2200,14 @@ struct hfd_meta {
 	uint32_t		hw_rot_mirror[CAMERA2_MAX_FACES];
 };
 
+enum camera_flip_mode {
+	CAM_FLIP_MODE_NORMAL = 0,
+	CAM_FLIP_MODE_HORIZONTAL,
+	CAM_FLIP_MODE_VERTICAL,
+	CAM_FLIP_MODE_HORIZONTAL_VERTICAL,
+	CAM_FLIP_MODE_MAX,
+};
+
 /** \brief
   stream structure for scaler.
  */
@@ -2338,6 +2365,9 @@ struct camera2_shot_ext {
 	uint32_t			bds_ratio_x;
 	uint32_t			bds_ratio_y;
 	uint32_t			remosaic_rotation;
+
+	enum camera_flip_mode		mcsc_flip[MCSC_PORT_MAX];
+	enum camera_flip_mode		mcsc_flip_result[MCSC_PORT_MAX];
 
 	/* reserved for future */
 	uint32_t			reserved[7];

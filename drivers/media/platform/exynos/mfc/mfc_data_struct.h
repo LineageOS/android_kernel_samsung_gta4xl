@@ -364,6 +364,7 @@ struct mfc_debugfs {
 #endif
 	struct dentry *debug_level;
 	struct dentry *debug_ts;
+	struct dentry *debug_mode_en;
 	struct dentry *dbg_enable;
 	struct dentry *nal_q_dump;
 	struct dentry *nal_q_disable;
@@ -798,6 +799,8 @@ struct mfc_dev {
 	struct mfc_debug	*logging_data;
 
 	int num_inst;
+
+	unsigned long otf_inst_bits;
 
 	struct mutex mfc_mutex;
 

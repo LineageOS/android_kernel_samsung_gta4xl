@@ -8,7 +8,7 @@ obj-$(CONFIG_EXYNOS_DECON_LCD_S6E3FA7)	+= s6e3fa7_mipi_lcd.o s6e3fa7_lcd_ctrl.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_EA8076)	+= ea8076_mipi_lcd.o ea8076_lcd_ctrl.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_EMUL_DISP) += emul_disp_mipi_lcd.o emul_disp_lcd_ctrl.o
 
-obj-y += ../decon_board.o ../decon_notify.o ../decon_abd.o dsim_panel.o
+obj-y += dsim_panel.o ../decon_board.o ../decon_notify.o ../decon_abd.o
 obj-$(CONFIG_DISPLAY_USE_INFO) += dpui.o
 obj-$(CONFIG_EXYNOS_DECON_MDNIE) += mdnie.o
 
@@ -20,3 +20,4 @@ obj-$(and $(CONFIG_EXYNOS_DECON_LCD_S6E3FA9_A51),$(CONFIG_SUPPORT_POC_FLASH)) +=
 obj-$(CONFIG_EXYNOS_DECON_LCD_NT36672A_XCOVERPRO)	+= nt36672a_xcoverpro_lcd_ctrl.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_HX83102E_GTA4XL)	+= hx83102e_gta4xl_lcd_ctrl.o
 obj-$(CONFIG_EXYNOS_DECON_LCD_EA8076_M31)	+= ea8076_m31_lcd_ctrl.o timenval.o
+obj-$(CONFIG_EXYNOS_DECON_LCD_EA8076_M31S)	+= ea8076_m31s_lcd_ctrl.o timenval.o

@@ -111,6 +111,7 @@ struct himax_i2c_platform_data {
 	struct kobj_attribute *vk2Use;
 	int hx_config_size;
 	bool support_aot;
+	bool support_dual_fw;
 
 	const char *i_CTPM_firmware_name;
 	const char *proj_name;
@@ -156,5 +157,6 @@ void himax_gpio_power_deconfig(struct himax_i2c_platform_data *pdata);
 #elif defined(CONFIG_FB)
 	extern int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
 #endif
+extern unsigned int lcdtype;
 
 #endif

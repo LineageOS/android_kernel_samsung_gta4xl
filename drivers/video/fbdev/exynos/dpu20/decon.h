@@ -892,6 +892,8 @@ struct decon_device {
 #if defined(CONFIG_SUPPORT_MASK_LAYER)
 	bool current_mask_layer;
 	struct decon_reg_data *mask_regs;
+	u32 wait_mask_layer_trigger;
+	wait_queue_head_t wait_mask_layer_trigger_queue;
 #endif
 	unsigned int partial_force_disable;
 
@@ -965,6 +967,7 @@ struct decon_device {
 	enum hwc_ver ver;
 	/* systrace */
 	struct decon_systrace_data systrace;
+	int	update_regs_list_cnt;
 
 	bool mres_enabled;
 	bool low_persistence;

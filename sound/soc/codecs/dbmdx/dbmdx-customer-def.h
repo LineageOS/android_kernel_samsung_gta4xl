@@ -25,6 +25,10 @@
 #define DBMDX_VC_NET_NAME			"vc_net.bin"
 #define DBMDX_VC_AMODEL_NAME			"vc_amodel.bin"
 
+#define DBMDX_VE_GRAM_NAME			"voice_grammar.bin"
+#define DBMDX_VE_NET_NAME			"voice_net.bin"
+#define DBMDX_VE_AMODEL_NAME			"voice_amodel.bin"
+
 /* ================ Defines related to kernel vesion ===============*/
 
 

@@ -76,7 +76,8 @@ static int vipx_memory_map_dmabuf(struct vipx_memory *mem,
 	}
 	buf->dvaddr = dvaddr;
 
-	if (buf->mem_attr == VIPX_COMMON_CACHEABLE) {
+	buf->cached = ion_cached_dmabuf(dbuf);
+	if (buf->cached) {
 		kvaddr = dma_buf_vmap(dbuf);
 		if (IS_ERR(kvaddr)) {
 			ret = PTR_ERR(kvaddr);
@@ -107,7 +108,7 @@ static int vipx_memory_unmap_dmabuf(struct vipx_memory *mem,
 		struct vipx_buffer *buf)
 {
 	vipx_enter();
-	if (buf->kvaddr)
+	if (buf->cached)
 		dma_buf_vunmap(buf->dbuf, buf->kvaddr);
 
 	ion_iovmm_unmap(buf->attachment, buf->dvaddr);
@@ -122,8 +123,8 @@ static int vipx_memory_sync_for_device(struct vipx_memory *mem,
 		struct vipx_buffer *buf)
 {
 	vipx_enter();
-	if (buf->mem_attr == VIPX_COMMON_NON_CACHEABLE) {
-		vipx_warn("It is not required to sync non-cacheable area(%d)\n",
+	if (!buf->cached) {
+		vipx_dbg("It is not required to sync non-cacheable area(%d)\n",
 				buf->m.fd);
 		return 0;
 	}
@@ -144,8 +145,8 @@ static int vipx_memory_sync_for_cpu(struct vipx_memory *mem,
 		struct vipx_buffer *buf)
 {
 	vipx_enter();
-	if (buf->mem_attr == VIPX_COMMON_NON_CACHEABLE) {
-		vipx_warn("It is not required to sync non-cacheable area(%d)\n",
+	if (!buf->cached) {
+		vipx_dbg("It is not required to sync non-cacheable area(%d)\n",
 				buf->m.fd);
 		return 0;
 	}

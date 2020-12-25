@@ -35,6 +35,7 @@
 #define IS_HMT(idx)					(idx && idx < HMT_MDNIE_MAX)
 #define IS_NIGHT_MODE(idx)			(idx && idx < NIGHT_MODE_MAX)
 #define IS_LIGHT_NOTIFICATION(idx)	(idx && idx < LIGHT_NOTIFICATION_MAX)
+#define IS_HDR(idx)					(idx && idx < HDR_MAX)
 
 #define SCENARIO_IS_VALID(idx)	(IS_DMB(idx) || IS_SCENARIO(idx))
 #define WRGB_IS_VALID(_x)		((_x <= 0) && (_x >= -30))
@@ -94,6 +95,9 @@ static struct mdnie_table *mdnie_find_table(struct mdnie_info *mdnie)
 		goto exit;
 	} else if (IS_COLOR_LENS(mdnie->color_lens)) {
 		table = mdnie->tune->lens_table ? &mdnie->tune->lens_table[mdnie->color_lens] : NULL;
+		goto exit;
+	} else if (IS_HDR(mdnie->hdr)) {
+		table = mdnie->tune->hdr_table ? &mdnie->tune->hdr_table[mdnie->hdr] : NULL;
 		goto exit;
 	} else if (IS_HMT(mdnie->hmt_mode)) {
 		table = mdnie->tune->hmt_table ? &mdnie->tune->hmt_table[mdnie->hmt_mode] : NULL;
@@ -819,6 +823,39 @@ static ssize_t color_lens_store(struct device *dev,
 	return count;
 }
 
+static ssize_t hdr_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct mdnie_info *mdnie = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d\n", mdnie->hdr);
+}
+
+static ssize_t hdr_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct mdnie_info *mdnie = dev_get_drvdata(dev);
+	unsigned int value = 0;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &value);
+	if (ret < 0)
+		return ret;
+
+	dev_info(dev, "%s: %d\n", __func__, value);
+
+	if (value >= HDR_MAX)
+		return -EINVAL;
+
+	mutex_lock(&mdnie->lock);
+	mdnie->hdr = value;
+	mutex_unlock(&mdnie->lock);
+
+	mdnie_update(mdnie);
+
+	return count;
+}
+
 #ifdef CONFIG_LCD_HMT
 static ssize_t hmtColorTemp_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -863,6 +900,7 @@ static DEVICE_ATTR(night_mode, 0664, night_mode_show, night_mode_store);
 static DEVICE_ATTR(mdnie_ldu, 0664, mdnie_ldu_show, mdnie_ldu_store);
 static DEVICE_ATTR(light_notification, 0664, light_notification_show, light_notification_store);
 static DEVICE_ATTR(color_lens, 0664, color_lens_show, color_lens_store);
+static DEVICE_ATTR(hdr, 0664, hdr_show, hdr_store);
 #ifdef CONFIG_LCD_HMT
 static DEVICE_ATTR(hmt_color_temperature, 0664, hmtColorTemp_show, hmtColorTemp_store);
 #endif
@@ -876,6 +914,7 @@ static struct attribute *mdnie_attrs[] = {
 	&dev_attr_bypass.attr,
 	&dev_attr_lux.attr,
 	&dev_attr_light_notification.attr,
+	&dev_attr_hdr.attr,
 #ifdef CONFIG_LCD_HMT
 	&dev_attr_hmt_color_temperature.attr,
 #endif

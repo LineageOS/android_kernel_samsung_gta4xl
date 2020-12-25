@@ -37,8 +37,13 @@
 #include "fimc-is-resourcemgr.h"
 #include "fimc-is-dt.h"
 #include "fimc-is-cis-3l6.h"
+#ifdef USE_3L6B_SETFILE
+#include "fimc-is-cis-3l6B-setA.h"
+#include "fimc-is-cis-3l6B-setB.h"
+#else
 #include "fimc-is-cis-3l6-setA.h"
 #include "fimc-is-cis-3l6-setB.h"
+#endif
 
 #include "fimc-is-helper-i2c.h"
 
@@ -377,9 +382,11 @@ static bool sensor_3l6_is_padf_enable(u32 mode)
 {
 	switch(mode)
 	{
+#ifndef USE_3L6B_SETFILE
 		case SENSOR_3L6_MODE_1280x720_120FPS:
 		case SENSOR_3L6_MODE_1024x768_120FPS:
 			return false;
+#endif
 		default:
 			return true;
 	}
@@ -434,6 +441,7 @@ int sensor_3l6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		dbg_sensor(1, "USE_MS_PDAF: [%s] NOT using pdaf\n", __func__);
 		switch (mode)
 		{
+#ifndef USE_3L6B_SETFILE
 			case SENSOR_3L6_MODE_1024x768_120FPS:
 				cis->cis_data->cur_pos_x = (sensor_3l6_setfiles[mode][CURR_X_INDEX_3L6] - CALIBRATE_CUR_X_3L6) >> 2;
 				cis->cis_data->cur_pos_y = (sensor_3l6_setfiles[mode][CURR_Y_INDEX_3L6] - CALIBRATE_CUR_Y_3L6) >> 2;
@@ -442,6 +450,7 @@ int sensor_3l6_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 				cis->cis_data->cur_pos_x = (sensor_3l6_setfiles[mode][CURR_X_INDEX_3L6] - CALIBRATE_CUR_X_3L6) >> 1;
 				cis->cis_data->cur_pos_y = (sensor_3l6_setfiles[mode][CURR_Y_INDEX_3L6] - CALIBRATE_CUR_Y_3L6) >> 1;
 				break;
+#endif
 			default:
 				cis->cis_data->cur_pos_x = 0;
 				cis->cis_data->cur_pos_y = 0;

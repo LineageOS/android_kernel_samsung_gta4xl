@@ -135,7 +135,11 @@ static int __vipx_pm_qos_add(struct vipx_pm *pm)
 	vipx_enter();
 	mutex_lock(&pm->lock);
 	if (pm->default_qos < 0)
+#if defined(CONFIG_EXYNOS_VIPX_EXYNOS9610_A)
+		__vipx_pm_qos_set_default(pm, 1);
+#else
 		__vipx_pm_qos_set_default(pm, 0);
+#endif
 
 	if (!vipx_pm_qos_active(pm)) {
 		pm_qos_add_request(&pm->cam_qos_req, PM_QOS_CAM_THROUGHPUT,
@@ -145,10 +149,10 @@ static int __vipx_pm_qos_add(struct vipx_pm *pm)
 				pm->current_qos);
 	}
 
-	if (pm->gating)
-		vipx_info("power gating was enabled\n");
+	if (pm->dvfs)
+		vipx_info("dvfs was enabled\n");
 	else
-		vipx_info("power gating was disabled\n");
+		vipx_info("dvfs was disabled\n");
 
 	mutex_unlock(&pm->lock);
 	vipx_leave();
@@ -210,7 +214,7 @@ void vipx_pm_qos_resume(struct vipx_pm *pm)
 
 static int __vipx_pm_qos_add(struct vipx_pm *pm)
 {
-	vipx_info("power gating was not supported\n");
+	vipx_info("dvfs was not supported\n");
 	return 0;
 }
 
@@ -224,11 +228,11 @@ static int __vipx_pm_qos_init(struct vipx_pm *pm)
 }
 #endif
 
-void vipx_pm_set_active(struct vipx_pm *pm)
+void vipx_pm_request_busy(struct vipx_pm *pm)
 {
 	vipx_enter();
 	mutex_lock(&pm->lock);
-	if (pm->gating) {
+	if (pm->dvfs) {
 		if (++pm->active_count == 1)
 			__vipx_pm_qos_update(pm, pm->default_qos);
 	}
@@ -236,11 +240,11 @@ void vipx_pm_set_active(struct vipx_pm *pm)
 	vipx_leave();
 }
 
-void vipx_pm_set_idle(struct vipx_pm *pm)
+void vipx_pm_request_idle(struct vipx_pm *pm)
 {
 	vipx_enter();
 	mutex_lock(&pm->lock);
-	if (pm->gating) {
+	if (pm->dvfs) {
 		if (!pm->active_count)
 			__vipx_pm_qos_update(pm, pm->qos_count - 1);
 		else if (--pm->active_count == 0)
@@ -286,7 +290,7 @@ int vipx_pm_probe(struct vipx_system *sys)
 	pm_runtime_enable(sys->dev);
 #endif
 	mutex_init(&pm->lock);
-	pm->gating = true;
+	pm->dvfs = true;
 
 	vipx_leave();
 	return 0;

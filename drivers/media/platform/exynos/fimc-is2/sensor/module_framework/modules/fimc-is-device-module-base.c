@@ -47,13 +47,9 @@
 #ifdef CONFIG_VENDER_MCD_V2
 #include "fimc-is-sec-define.h"
 #if defined(CONFIG_LEDS_S2MU106_FLASH)
-#include <linux/leds-s2mu106.h>
-#include <linux/mfd/samsung/s2mu106.h>
-/* MUIC header file */
-#include <linux/muic/muic.h>
-#include <linux/muic/s2mu106-muic.h>
 #include <linux/muic/s2mu106-muic-hv.h>
-#include <linux/ccic/usbpd_ext.h>
+#include <linux/usb/typec/s2mu106/s2mu106_pd.h>
+#include <linux/usb/typec/s2mu106/s2mu106_typec.h>
 #endif
 #endif
 

@@ -100,3 +100,9 @@ config  CAMERA_ATS_V04
         default n
         help
           This camera is ats_v04 project.
+config CAMERA_MMS_V31S
+        bool "This camera is mms_v31s project"
+        depends on VENDER_MCD_V2
+        default n
+        help
+          This camera is mms_v31s project

@@ -21,7 +21,11 @@
 #ifndef __MUIC_INTERNAL_H__
 #define __MUIC_INTERNAL_H__
 
-#include <linux/muic/muic_core.h>
+#include <linux/muic/muic.h>
+
+#if defined(CONFIG_MUIC_SUPPORT_POWERMETER)
+#include <linux/power_supply.h>
+#endif
 
 #define muic_err(fmt, ...)					\
 	do {							\
@@ -38,11 +42,6 @@
 		pr_debug(pr_fmt(fmt), ##__VA_ARGS__);		\
 	} while (0)
 
-enum muic_op_mode {
-	OPMODE_SMD_ARRAY = 0<<0,
-	OPMODE_DEVICE = 1<<0,
-};
-
 /* Slave addr = 0x4A: MUIC */
 enum ioctl_cmd {
 	GET_COM_VAL = 0x01,
@@ -56,8 +55,8 @@ enum ioctl_cmd {
 	GET_RESID3 = 0x09,
 };
 
-enum switching_mode {
-	SWMODE_MANUAL = 0,
+enum switching_mode{
+	SWMODE_MANUAL =0,
 	SWMODE_AUTO = 1,
 };
 
@@ -79,25 +78,25 @@ enum com_index {
 	COM_AUDIO   = 7,
 };
 
-enum {
+enum{
 	ADC_SCANMODE_CONTINUOUS = 0x0,
 	ADC_SCANMODE_ONESHOT = 0x1,
 	ADC_SCANMODE_PULSE = 0x2,
 };
 
-enum vps_type {
-	VPS_TYPE_SCATTERED = 0,
-	VPS_TYPE_TABLE = 1,
+enum vps_type{
+	VPS_TYPE_SCATTERED =0,
+	VPS_TYPE_TABLE =1,
 };
 
 /* VPS data from a chip. */
 typedef struct _muic_vps_scatterred_type {
-	u8 val1;
-	u8 val2;
-	u8 val3;
-	u8 adc;
-	u8 vbvolt;
-} vps_scatterred_type;
+        u8      val1;
+        u8      val2;
+        u8      val3;
+        u8      adc;
+        u8      vbvolt;
+}vps_scatterred_type;
 
 typedef struct _muic_vps_table_t {
 	u8  adc;
@@ -113,7 +112,7 @@ typedef struct _muic_vps_table_t {
 	u8 status[3];
 	u8 control[4];
 	u8 hvcontrol[2];
-} vps_table_type;
+}vps_table_type;
 
 struct muic_intr_data {
 	u8	intr1;
@@ -133,7 +132,7 @@ typedef union _muic_vps_t {
 	vps_scatterred_type s;
 	vps_table_type t;
 	char vps_data[120];
-} vps_data_t;
+}vps_data_t;
 
 /* muic chip specific internal data structure
  * that setted at muic-xxxx.c file
@@ -166,10 +165,18 @@ struct ccic_desc_t {
 	struct ccic_rid_desc_t *rid_desc;
 };
 
-enum {
+typedef enum {
 	MUIC_NORMAL_OTG,
 	MUIC_ABNORMAL_OTG,
-};
+} muic_usb_killer_t;
+
+#if defined(CONFIG_MUIC_SUPPORT_PRSWAP)
+typedef enum {
+	MUIC_PRSWAP_UNDIFINED,
+	MUIC_PRSWAP_TO_SINK,
+	MUIC_PRSWAP_TO_SRC,
+} muic_prswap_t;
+#endif
 
 struct muic_interface_t {
 	struct device *dev;
@@ -215,8 +222,11 @@ struct muic_interface_t {
 	bool			undefined_range;
 	bool			discard_interrupt;
 	bool			is_dcdtmr_intr;
-	bool			is_dcp_charger;
+	bool 			is_dcp_charger;
 	bool			is_afc_reset;
+	bool			is_afc_pdic_ready;
+	bool			is_bypass;
+	bool			is_ccic_attached;
 
 	struct hv_data		*phv;
 
@@ -235,12 +245,22 @@ struct muic_interface_t {
 	struct notifier_block	ccic_nb;
 #endif
 	struct delayed_work	ccic_work;
-	bool afc_water_disable;
+	bool 			afc_water_disable;
 #endif
 	/* Operation Mode */
 	enum muic_op_mode	opmode;
 
+#if defined(CONFIG_MUIC_SUPPORT_PRSWAP)
+	muic_prswap_t prswap_status;
+#endif
+
+#if defined(CONFIG_MUIC_SUPPORT_POWERMETER)
+	struct power_supply *psy_muic;
+	struct power_supply_desc psy_muic_desc;
+#endif
+
 	/* function pointer should be registered from each specific driver file */
+	int (*set_com_to_open_with_vbus)(void *);
 	int (*set_com_to_open)(void *);
 	int (*set_switch_to_usb)(void *);
 	int (*set_switch_to_uart)(void *);
@@ -252,20 +272,58 @@ struct muic_interface_t {
 	void (*set_afc_ready)(void *, bool en);
 	int (*bcd_rescan)(void *);
 	int (*control_rid_adc)(void *, bool enable);
-#if defined(CONFIG_MUIC_S2MU004_HV)
+	int (*get_vbus_voltage)(void *);
+
+#if defined(CONFIG_MUIC_S2MU004_HV) || defined(CONFIG_MUIC_HV)
 	int (*set_afc_reset)(void *);
 	muic_attached_dev_t (*check_id_err)(void *, muic_attached_dev_t new_dev);
 	int (*reset_hvcontrol_reg)(void *);
 	int (*check_afc_ready)(void *);
+	int (*get_afc_ready)(void *);
 	int (*reset_afc_register)(void *);
+#if defined(CONFIG_MUIC_SUPPORT_POWERMETER)
+	int (*pm_chgin_irq)(void *, int vol);
+#endif
+#if IS_ENABLED(CONFIG_HV_MUIC_VOLTAGE_CTRL)
+	int (*set_afc_voltage)(void *, int vol);
+#endif
+	void (*hv_reset)(void *);
+	void (*hv_dcp_charger)(void *);
+	void (*hv_fast_charge_adaptor)(void *);
+	void (*hv_fast_charge_communication)(void *);
+	void (*hv_afc_5v_charger)(void *);
+	void (*hv_afc_9v_charger)(void *);
+	void (*hv_qc_charger)(void *);
+	void (*hv_qc_5v_charger)(void *);
+	void (*hv_qc_9v_charger)(void *);
 #endif
 	void (*set_water_detect)(void *, bool val);
+#ifndef CONFIG_SEC_FACTORY
+	void (*set_water_detect_from_boot)(void *, bool val);
+#endif
+
 	int (*set_com_to_audio)(void *);
 	int (*set_com_to_otg)(void *);
 	int (*set_gpio_usb_sel)(void *, int usb_path);
 	int (*set_gpio_uart_sel)(void *, int uart_path);
 	int (*get_vbus)(void *);
 	int (*get_adc)(void *);
+	int (*check_usb_killer)(void *);
+#ifdef CONFIG_MUIC_SYSFS
+	int (*show_register)(void *, char *mesg);
+#if IS_ENABLED(CONFIG_SEC_FACTORY) && IS_ENABLED(CONFIG_USB_HOST_NOTIFY)
+	int (*set_otg_reg)(void *, bool enable);
+#endif
+#endif
+#if IS_ENABLED(CONFIG_HICCUP_CHARGER)
+	int (*set_hiccup_mode)(void *, bool en);
+	int (*get_hiccup_mode)(void *);
+#endif
+#if defined(CONFIG_MUIC_SUPPORT_PRSWAP)
+	void (*set_chg_det)(void *, bool en);
+	void (*prswap_work)(void *, int mode);
+#endif
+	void (*set_bypass)(void *);
 };
 
 extern struct device *switch_device;
@@ -276,5 +334,8 @@ int muic_manager_get_legacy_dev(struct muic_interface_t *muic_if);
 void muic_manager_set_legacy_dev(struct muic_interface_t *muic_if, int new_dev);
 void muic_manager_handle_ccic_detach(struct muic_interface_t *muic_if);
 int muic_manager_dcd_rescan(struct muic_interface_t *muic_if);
+#if defined(CONFIG_MUIC_SUPPORT_POWERMETER)
+int muic_manager_psy_init(struct muic_interface_t *muic_if, struct device *parent);
+#endif
 
 #endif /* __MUIC_INTERNAL_H__ */

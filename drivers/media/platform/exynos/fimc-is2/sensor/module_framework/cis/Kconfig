@@ -292,12 +292,34 @@ config CAMERA_CIS_HI1336_OBJ
 	help
 	  Use to build Hi1336 camera sensor.
 
+config CAMERA_CIS_HI2021Q_OBJ
+	bool "Use Hi2021q camera cis"
+	depends on USE_DIRECT_IS_CONTROL
+	depends on CAMERA_CIS_SELECT
+	default n
+	help
+	  Use to build Hi2021q camera sensor.
+
 config CAMERA_CIS_GW1_OBJ
 	bool "Use GW1 camera cis"
 	depends on CAMERA_CIS_SELECT
 	default n
 	help
 	  Use to build GW1 camera sensor.
+
+config CAMERA_CIS_IMX682_OBJ
+	bool "Use IMX682 camera cis"
+	depends on CAMERA_CIS_SELECT
+	default n
+	help
+	  Use to build IMX682 camera sensor.
+
+config CAMERA_CIS_GD1_OBJ
+	bool "Use GD1 camera cis"
+	depends on CAMERA_CIS_SELECT
+	default n
+	help
+	  Use to build GD1 camera sensor.
 
 config CAMERA_CIS_RPB_OBJ
 	bool "Use RPB camera cis"

@@ -82,7 +82,7 @@ struct fimc_is_vender_rom_addr {
 	int32_t		rom_header_project_name_start_addr;
 	int32_t		rom_header_module_id_addr;
 	int32_t		rom_header_main_sensor_id_addr;
-	
+
 	int32_t		rom_header_sub_module_info_start_addr;
 	int32_t		rom_header_sub_sensor_id_addr;
 
@@ -107,10 +107,10 @@ struct fimc_is_vender_rom_addr {
 	int32_t		rom_header_sub_awb_end_addr;
 	int32_t		rom_header_sub_shading_start_addr;
 	int32_t		rom_header_sub_shading_end_addr;
-	
+
 	int32_t		rom_header_main_mtf_data_addr;
 	int32_t		rom_header_sub_mtf_data_addr;
-	
+
 	int32_t		rom_header_checksum_addr;
 	int32_t		rom_header_checksum_len;
 
@@ -224,6 +224,9 @@ struct fimc_is_vender_specific {
 	bool			need_retention_init;
 #endif
 
+#ifdef USE_DUALCAM_SET_CAL
+	bool			use_dualcam_set_cal;
+#endif
 };
 
 #endif

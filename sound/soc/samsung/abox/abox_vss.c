@@ -22,6 +22,7 @@ static unsigned int VSS_MAGIC_OFFSET = 0x500000;
 static int samsung_abox_vss_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+
 	if (IS_ENABLED(CONFIG_SHM_IPC)) {
 		struct device_node *np = dev->of_node;
 		void __iomem *magic_addr;

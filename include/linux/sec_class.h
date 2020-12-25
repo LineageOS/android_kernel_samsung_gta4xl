@@ -3,6 +3,7 @@
 
 #ifdef CONFIG_DRV_SAMSUNG
 extern struct device *sec_device_create(void *drvdata, const char *fmt);
+extern struct device *sec_device_find(const char *name);
 extern void sec_device_destroy(dev_t devt);
 #else
 #define sec_device_create(a, b)		(-1)

@@ -849,7 +849,7 @@ void slsi_mlme_del_vif(struct slsi_dev *sdev, struct net_device *dev)
 	slsi_kfree_skb(cfm);
 }
 
-#ifdef CONFIG_SLSI_WLAN_STA_FWD_BEACON
+#if defined(CONFIG_SLSI_WLAN_STA_FWD_BEACON) && (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 100000)
 int slsi_mlme_set_forward_beacon(struct slsi_dev *sdev, struct net_device *dev, int action)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
@@ -3196,7 +3196,7 @@ int slsi_mlme_send_frame_data(struct slsi_dev *sdev, struct net_device *dev, str
 #endif
 
 	if (original_skb)
-		slsi_kfree_skb(original_skb);
+		consume_skb(original_skb);
 
 	/* as the frame is queued to HIP for transmission, store the host tag of the frames
 	 * to validate the transmission status in MLME-Frame-Transmission.indication.
@@ -3640,12 +3640,12 @@ int slsi_mlme_del_traffic_parameters(struct slsi_dev *sdev, struct net_device *d
 	return r;
 }
 
-int slsi_mlme_set_ext_capab(struct slsi_dev *sdev, struct net_device *dev, struct slsi_mib_value *mib_val)
+int slsi_mlme_set_ext_capab(struct slsi_dev *sdev, struct net_device *dev, u8 *data, int datalength)
 {
 	struct slsi_mib_data mib_data = { 0, NULL };
 	int                  error = 0;
 
-	error = slsi_mib_encode_octet(&mib_data, SLSI_PSID_UNIFI_EXTENDED_CAPABILITIES, mib_val->u.octetValue.dataLength, mib_val->u.octetValue.data, 0);
+	error = slsi_mib_encode_octet(&mib_data, SLSI_PSID_UNIFI_EXTENDED_CAPABILITIES, datalength, data, 0);
 	if (error != SLSI_MIB_STATUS_SUCCESS) {
 		error = -ENOMEM;
 		goto exit;
@@ -3665,88 +3665,6 @@ int slsi_mlme_set_ext_capab(struct slsi_dev *sdev, struct net_device *dev, struc
 exit:
 	SLSI_ERR(sdev, "Error in setting ext capab. error = %d\n", error);
 	return error;
-}
-
-int slsi_mlme_set_hs2_ext_cap(struct slsi_dev *sdev, struct net_device *dev, const u8 *ies, int ie_len)
-{
-	struct slsi_mib_entry mib_entry;
-	struct slsi_mib_data  mibreq = { 0, NULL };
-	struct slsi_mib_data  mibrsp = { 0, NULL };
-	const u8              *ext_capab_ie;
-	int                   r                       = 0;
-	int                   rx_length               = 0;
-	int                   len                     = 0;
-
-	slsi_mib_encode_get(&mibreq, SLSI_PSID_UNIFI_EXTENDED_CAPABILITIES, 0);
-
-	/*  5 (header) + 9 (data)  + 2 (mlme expects 16 (??))*/
-	mibrsp.dataLength = 16;
-	mibrsp.data = kmalloc(mibrsp.dataLength, GFP_KERNEL);
-
-	if (!mibrsp.data) {
-		SLSI_ERR(sdev, "Failed to alloc for Mib response\n");
-		kfree(mibreq.data);
-		return -ENOMEM;
-	}
-
-	r = slsi_mlme_get(sdev, NULL, mibreq.data, mibreq.dataLength,
-			  mibrsp.data, mibrsp.dataLength, &rx_length);
-	kfree(mibreq.data);
-
-	if (r == 0) {
-		mibrsp.dataLength = rx_length;
-		len = slsi_mib_decode(&mibrsp, &mib_entry);
-		if (len == 0) {
-			SLSI_ERR(sdev, "Mib decode error\n");
-			r = -EINVAL;
-			goto exit;
-		}
-	} else {
-		SLSI_NET_DBG1(dev, SLSI_MLME, "Mib read failed (error: %d)\n", r);
-		goto exit;
-	}
-
-	ext_capab_ie = cfg80211_find_ie(WLAN_EID_EXT_CAPABILITY, ies, ie_len);
-
-	if (ext_capab_ie) {
-		u8 ext_capab_ie_len = ext_capab_ie[1];
-
-		ext_capab_ie += 2; /* skip the EID and length*/
-
-		/*BSS Transition bit is bit 19 ,ie length must be >= 3 */
-		if ((ext_capab_ie_len >= 3) && (ext_capab_ie[2] & SLSI_WLAN_EXT_CAPA2_BSS_TRANSISITION_ENABLED))
-			mib_entry.value.u.octetValue.data[2] |= SLSI_WLAN_EXT_CAPA2_BSS_TRANSISITION_ENABLED;
-		else
-			mib_entry.value.u.octetValue.data[2] &= ~SLSI_WLAN_EXT_CAPA2_BSS_TRANSISITION_ENABLED;
-
-		/*interworking bit is bit 31 ,ie length must be >= 4 */
-		if ((ext_capab_ie_len >= 4) && (ext_capab_ie[3] & SLSI_WLAN_EXT_CAPA3_INTERWORKING_ENABLED))
-			mib_entry.value.u.octetValue.data[3] |= SLSI_WLAN_EXT_CAPA3_INTERWORKING_ENABLED;
-		else
-			mib_entry.value.u.octetValue.data[3] &= ~SLSI_WLAN_EXT_CAPA3_INTERWORKING_ENABLED;
-
-		/*QoS MAP is bit 32 ,ie length must be >= 5 */
-		if ((ext_capab_ie_len >= 5) && (ext_capab_ie[4] & SLSI_WLAN_EXT_CAPA4_QOS_MAP_ENABLED))
-			mib_entry.value.u.octetValue.data[4] |= SLSI_WLAN_EXT_CAPA4_QOS_MAP_ENABLED;
-		else
-			mib_entry.value.u.octetValue.data[4] &= ~SLSI_WLAN_EXT_CAPA4_QOS_MAP_ENABLED;
-
-		/*WNM- Notification bit is bit 46 ,ie length must be >= 6 */
-		if ((ext_capab_ie_len >= 6) && (ext_capab_ie[5] & SLSI_WLAN_EXT_CAPA5_WNM_NOTIF_ENABLED))
-			mib_entry.value.u.octetValue.data[5] |= SLSI_WLAN_EXT_CAPA5_WNM_NOTIF_ENABLED;
-		else
-			mib_entry.value.u.octetValue.data[5] &= ~SLSI_WLAN_EXT_CAPA5_WNM_NOTIF_ENABLED;
-	} else {
-		mib_entry.value.u.octetValue.data[2] &= ~SLSI_WLAN_EXT_CAPA2_BSS_TRANSISITION_ENABLED;
-		mib_entry.value.u.octetValue.data[3] &= ~SLSI_WLAN_EXT_CAPA3_INTERWORKING_ENABLED;
-		mib_entry.value.u.octetValue.data[4] &= ~SLSI_WLAN_EXT_CAPA4_QOS_MAP_ENABLED;
-		mib_entry.value.u.octetValue.data[5] &= ~SLSI_WLAN_EXT_CAPA5_WNM_NOTIF_ENABLED;
-	}
-
-	r = slsi_mlme_set_ext_capab(sdev, dev, &mib_entry.value);
-exit:
-	kfree(mibrsp.data);
-	return r;
 }
 
 int slsi_mlme_tdls_peer_resp(struct slsi_dev *sdev, struct net_device *dev, u16 pid, u16 tdls_event)
@@ -4548,20 +4466,27 @@ int slsi_mlme_set_country(struct slsi_dev *sdev, char *alpha2)
 	struct slsi_mib_data mib_data = { 0, NULL };
 	struct sk_buff    *req;
 	struct sk_buff    *cfm;
-	int country_index = 0;
+	int country_index = -1;
 	u32 rules_len = 0;
 	u16 country_code = 0;
 	u8 append_byte = 0;
 	u8 dfs_region = 0;
 	int i = 0;
 	int error = 0;
+	int freq_range = 0;
 
 	if (sdev->regdb.regdb_state == SLSI_REG_DB_SET) {
 		for (i = 0; i < sdev->regdb.num_countries; i++) {
-			if ((sdev->regdb.country[i].alpha2[0] == alpha2[0]) && (sdev->regdb.country[i].alpha2[1] == alpha2[1])) {
+			if ((sdev->regdb.country[i].alpha2[0] == alpha2[0]) &&
+			    (sdev->regdb.country[i].alpha2[1] == alpha2[1])) {
 				country_index = i;
 				break;
 			}
+		}
+
+		if (country_index == -1) {
+			SLSI_ERR(sdev, "Invalid country code!\n");
+			return -EINVAL;
 		}
 
 		/* 7 octets for each rule */
@@ -4587,7 +4512,14 @@ int slsi_mlme_set_country(struct slsi_dev *sdev, char *alpha2)
 			fapi_append_data(req, &append_byte, 1);
 			append_byte = ((sdev->regdb.country[country_index].collection->reg_rule[i]->freq_range->end_freq * 2) >> 8) & 0xFF;
 			fapi_append_data(req, &append_byte, 1);
-			append_byte = sdev->regdb.country[country_index].collection->reg_rule[i]->freq_range->max_bandwidth & 0xFF;
+			freq_range = sdev->regdb.country[country_index].collection->reg_rule[i]->freq_range->end_freq -
+				     sdev->regdb.country[country_index].collection->reg_rule[i]->freq_range->start_freq;
+			if (((sdev->regdb.country[country_index].collection->reg_rule[i]->freq_range->start_freq / 1000) == 5) &&
+			    sdev->forced_bandwidth &&
+			    (freq_range >= sdev->forced_bandwidth))
+				append_byte = sdev->forced_bandwidth;
+			else
+				append_byte = sdev->regdb.country[country_index].collection->reg_rule[i]->freq_range->max_bandwidth & 0xFF;
 			fapi_append_data(req, &append_byte, 1);
 			append_byte = sdev->regdb.country[country_index].collection->reg_rule[i]->max_eirp & 0xFF;
 			fapi_append_data(req, &append_byte, 1);

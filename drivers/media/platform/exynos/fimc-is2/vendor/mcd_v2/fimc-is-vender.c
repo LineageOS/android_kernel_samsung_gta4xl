@@ -337,7 +337,9 @@ int fimc_is_vender_probe(struct fimc_is_vender *vender)
 		specific->rom_data[i].rom_type = ROM_TYPE_NONE;
 		specific->rom_data[i].rom_valid = false;
 		specific->rom_data[i].is_rom_read = false;
-
+#ifdef USE_DIFFERENT_ISP_MODULE
+		specific->rom_data[i].use_different_isp_module = false;
+#endif /* USE_DIFFERENT_ISP_MODULE */
 		specific->rom_cal_map_addr[i] = NULL;
 
 		specific->rom_share[i].check_rom_share = false;
@@ -1248,6 +1250,28 @@ int fimc_is_vender_set_torch(u32 aeflashMode)
 }
 #endif
 
+void fimc_is_vender_csi_err_print_debug_log(struct fimc_is_device_sensor *device)
+{
+	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+	struct fimc_is_cis *cis = NULL;
+	int ret = 0;
+
+	if (device && device->pdev) {
+		ret = fimc_is_sensor_g_module(device, &module);
+		if (ret) {
+			warn("%s sensor_g_module failed(%d)", __func__, ret);
+			return;
+		}
+
+		sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
+		if (sensor_peri->subdev_cis) {
+			cis = (struct fimc_is_cis *)v4l2_get_subdevdata(sensor_peri->subdev_cis);
+			CALL_CISOPS(cis, cis_log_status, sensor_peri->subdev_cis);
+		}
+	}
+}
+
 int fimc_is_vender_video_s_ctrl(struct v4l2_control *ctrl,
 	void *device_data)
 {
@@ -1276,7 +1300,8 @@ int fimc_is_vender_video_s_ctrl(struct v4l2_control *ctrl,
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_MFHDR_DYNAMIC_SHOT
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_LLHDR_DYNAMIC_SHOT
 			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_HANDHELD
-			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_TRIPOD) {
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_SUPER_NIGHT_SHOT_TRIPOD
+			|| captureIntent == AA_CAPTURE_INTENT_STILL_CAPTURE_CROPPED_REMOSAIC_DYNAMIC_SHOT) {
 			captureCount = value & 0x0000FFFF;
 		} else {
 			captureIntent = ctrl->value;
@@ -1342,6 +1367,7 @@ int fimc_is_vender_video_s_ctrl(struct v4l2_control *ctrl,
 		case IS_COLD_RESET:
 			specific ->need_cold_reset = true;
 			minfo("[VENDER] need cold reset!!!\n", device);
+			fimc_is_vender_csi_err_print_debug_log(device->sensor);
 			break;
 		default:
 			err("[VENDER]unsupported ioctl(0x%X)", ctrl->id);

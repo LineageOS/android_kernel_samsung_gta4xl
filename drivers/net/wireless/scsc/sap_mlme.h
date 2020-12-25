@@ -13,7 +13,7 @@ int sap_mlme_deinit(void);
 
 /* MLME signal handlers in rx.c */
 void slsi_rx_scan_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);
-#ifdef CONFIG_SLSI_WLAN_STA_FWD_BEACON
+#if defined CONFIG_SLSI_WLAN_STA_FWD_BEACON && (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 100000)
 void slsi_rx_beacon_reporting_event_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);
 #endif
 void slsi_rx_scan_done_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);

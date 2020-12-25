@@ -11,10 +11,10 @@
 #define S5KGM2_AVDD      "CAM_VLDO6"       /* RCAM1_AVDD1_2P9 */
 #define S5KGM2_DVDD      "CAM_VLDO1"       /* RCAM1_DVDD_1P05 */
 
-/***** FRONT - 3P8SP *****/
-#define S5K3P8SP_IOVDD    "CAM_VLDO3"      /* CAM_VDDIO_1P8  */
-#define S5K3P8SP_AVDD     "CAM_VLDO5"      /* RCAM3_AVDD_2P8 */
-#define S5K3P8SP_DVDD     "CAM_VLDO2"      /* RCAM3_DVDD_1P1 */
+/***** FRONT - HI2021Q *****/
+#define HI2021Q_IOVDD    "CAM_VLDO3"      /* CAM_VDDIO_1P8  */
+#define HI2021Q_AVDD     "CAM_VLDO5"      /* RCAM3_AVDD_2P8 */
+#define HI2021Q_DVDD     "CAM_VLDO2"      /* RCAM3_DVDD_1P1 */
 
 /***** REAR2 SUB - GC5035 *****/
 #define GC5035_IOVDD    "CAM_VLDO3"        /* CAM_VDDIO_1P8 */ 

@@ -372,6 +372,7 @@ struct mms_ts_info {
 	unsigned char finger_state[MAX_FINGER_NUM];
 	int touch_count;
 
+	u8 fod_lp_mode;
 	u8 fod_tx;
 	u8 fod_rx;
 	u8 fod_vi_size;
@@ -500,6 +501,7 @@ struct mms_devicetree_data {
 	bool support_protos;
 	bool regulator_boot_on;
 	bool support_dual_fw;
+	bool support_model_feature;
 
 	int max_x;
 	int max_y;

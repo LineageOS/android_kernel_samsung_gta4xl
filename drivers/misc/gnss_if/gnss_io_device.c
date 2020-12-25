@@ -579,6 +579,16 @@ static long misc_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		gif_err("%s: GNSS_IOCTL_SENSOR_POWER\n", iod->name);
 		return set_sensor_power(gc, arg);
 
+	case GNSS_IOCTL_PURE_RELEASE:
+		gif_err("%s: GNSS_IOCTL_PURE_RELEASE\n", iod->name);
+		
+		if (!gc->ops.gnss_pure_release) {	
+			gif_err("%s: !gc->ops.gnss_pure_release\n", iod->name);	
+			return -EINVAL;	
+		}	
+		gc->ops.gnss_pure_release(gc);	
+		return 0;	
+
 	default:
 
 		gif_err("%s: ERR! undefined cmd 0x%X\n", iod->name, cmd);

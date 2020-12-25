@@ -23,6 +23,7 @@
 
 #include <linux/platform_data/spi-s3c64xx.h>
 #include <linux/wakelock.h>
+#include <linux/regulator/consumer.h>
 #ifdef ENABLE_SENSORS_FPRINT_SECURE
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
@@ -212,6 +213,8 @@ struct etspi_data {
 	unsigned int drdyPin;	/* DRDY GPIO pin number */
 	unsigned int sleepPin;	/* Sleep GPIO pin number */
 	unsigned int ldo_pin;	/* Ldo GPIO pin number */
+	const char *btp_vdd;
+	struct regulator *regulator_3p3;
 #ifndef ENABLE_SENSORS_FPRINT_SECURE
 #ifdef CONFIG_SOC_EXYNOS8890
 	/* set cs pin in fp driver, use only Exynos8890 */

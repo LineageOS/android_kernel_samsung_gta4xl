@@ -611,7 +611,6 @@ void ipc_print_evt(enum ipc_evt_list evtq)
 		}
 	} else
 		CSP_PRINTF_INFO("%s:%s: invalid evtq\n", NAME_PREFIX, __func__);
-
 }
 
 void ipc_dump(void)
@@ -771,6 +770,11 @@ void ipc_dump_mailbox_sfr(struct mailbox_sfr *mailbox)
 	mailbox->INTMR1  = __raw_readl(ipc_own[AP].base + REG_MAILBOX_INTMR1);
 	mailbox->INTSR1	 = __raw_readl(ipc_own[AP].base + REG_MAILBOX_INTSR1);
 	mailbox->INTMSR1 = __raw_readl(ipc_own[AP].base + REG_MAILBOX_INTMSR1);
+        pr_info("%s: 0x%x/0x%x 0x%x 0x%x 0x%x 0x%x/0x%x 0x%x 0x%x 0x%x 0x%x\n",
+		        __func__, mailbox->MCUCTL, mailbox->INTGR0, mailbox->INTCR0,
+			mailbox->INTMR0, mailbox->INTSR0, mailbox->INTMSR0,
+			mailbox->INTGR1, mailbox->INTCR1, mailbox->INTMR1,
+			mailbox->INTSR1, mailbox->INTMSR1);
 
 	pr_info("%s: 0x%x/ c2a: 0x%x 0x%x 0x%x 0x%x 0x%x/ a2c: 0x%x 0x%x 0x%x 0x%x 0x%x\n",
 		__func__, mailbox->MCUCTL,

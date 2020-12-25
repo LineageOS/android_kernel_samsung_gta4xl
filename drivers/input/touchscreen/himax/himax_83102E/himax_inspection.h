@@ -130,6 +130,11 @@ enum fw_update_errno {
 #define ACSII_SPACE	(0x20)
 /* INSOECTION Setting */
 
+enum AP_MODE {
+	GAME_MODE,
+	NOTE_MODE
+};
+
 void himax_inspection_init(void);
 extern int *g_test_item_flag;
 extern int HX_CRITERIA_ITEM;

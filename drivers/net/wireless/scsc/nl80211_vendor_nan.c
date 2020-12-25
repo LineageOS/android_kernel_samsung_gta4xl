@@ -717,7 +717,8 @@ int slsi_nan_disable(struct wiphy *wiphy, struct wireless_dev *wdev, const void 
 		type = nla_type(iter);
 		switch (type) {
 		case NAN_REQ_ATTR_HAL_TRANSACTION_ID:
-			transaction_id = nla_get_u16(iter);
+			if (slsi_util_nla_get_u16(iter, &(transaction_id)))
+				return -EINVAL;
 			break;
 		default:
 			break;
@@ -986,10 +987,12 @@ int slsi_nan_publish_cancel(struct wiphy *wiphy, struct wireless_dev *wdev,
 		type = nla_type(iter);
 		switch (type) {
 		case NAN_REQ_ATTR_PUBLISH_ID:
-			publish_id = nla_get_u16(iter);
+			if (slsi_util_nla_get_u16(iter, &(publish_id)))
+				return -EINVAL;
 			break;
 		case NAN_REQ_ATTR_HAL_TRANSACTION_ID:
-			transaction_id = nla_get_u16(iter);
+			if (slsi_util_nla_get_u16(iter, &(transaction_id)))
+				return -EINVAL;
 			break;
 
 		default:
@@ -1807,7 +1810,8 @@ int slsi_nan_get_capabilities(struct wiphy *wiphy, struct wireless_dev *wdev, co
 		type = nla_type(iter);
 		switch (type) {
 		case NAN_REQ_ATTR_HAL_TRANSACTION_ID:
-			transaction_id = nla_get_u16(iter);
+			if (slsi_util_nla_get_u16(iter, &(transaction_id)))
+				return -EINVAL;
 			break;
 		default:
 			break;
@@ -1894,9 +1898,14 @@ int slsi_nan_data_iface_create(struct wiphy *wiphy, struct wireless_dev *wdev, c
 
 	nla_for_each_attr(iter, data, len, tmp) {
 		type = nla_type(iter);
-		if (type == NAN_REQ_ATTR_DATA_INTERFACE_NAME)
+		if (type == NAN_REQ_ATTR_DATA_INTERFACE_NAME) {
+			/* 16 is the interface length from net_device
+			 * structure.
+			 */
+			if (nla_len(iter) > IFNAMSIZ)
+				return -EINVAL;
 			iface_name = nla_data(iter);
-		else if (type == NAN_REQ_ATTR_HAL_TRANSACTION_ID)
+		} else if (type == NAN_REQ_ATTR_HAL_TRANSACTION_ID)
 			if (slsi_util_nla_get_u16(iter, &transaction_id))
 				return -EINVAL;
 	}
@@ -1968,9 +1977,14 @@ int slsi_nan_data_iface_delete(struct wiphy *wiphy, struct wireless_dev *wdev, c
 
 	nla_for_each_attr(iter, data, len, tmp) {
 		type = nla_type(iter);
-		if (type == NAN_REQ_ATTR_DATA_INTERFACE_NAME)
+		if (type == NAN_REQ_ATTR_DATA_INTERFACE_NAME) {
+			/* 16 is the interface length from net_device
+			 * structure.
+			 */
+			if (nla_len(iter) > IFNAMSIZ)
+				return -EINVAL;
 			iface_name = nla_data(iter);
-		else if (type == NAN_REQ_ATTR_HAL_TRANSACTION_ID)
+		} else if (type == NAN_REQ_ATTR_HAL_TRANSACTION_ID)
 			if (slsi_util_nla_get_u16(iter, &transaction_id))
 				return -EINVAL;
 	}
@@ -2026,6 +2040,8 @@ int slsi_nan_ndp_initiate_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_n
 			break;
 
 		case NAN_REQ_ATTR_MAC_ADDR_VAL:
+			if (nla_len(iter) < ETH_ALEN)
+				return -EINVAL;
 			ether_addr_copy(hal_req->peer_disc_mac_addr, nla_data(iter));
 			break;
 
@@ -2867,7 +2883,7 @@ void slsi_nan_ndp_setup_ind(struct slsi_dev *sdev, struct net_device *dev, struc
 				break;
 			} else if (tag_id == SLSI_NAN_TLV_WFA_SERVICE_INFO) {
 				res |= nla_put_u16(nl_skb, NAN_EVT_ATTR_APP_INFO_LEN, tag_len+3);//Tag 1 Bytes Length 2 bytes
-				ptr[1]=ptr[0];
+				ptr[1] = ptr[0];
 				res |= nla_put(nl_skb, NAN_EVT_ATTR_APP_INFO, tag_len+3, &ptr[1]);
 				break;
 			}

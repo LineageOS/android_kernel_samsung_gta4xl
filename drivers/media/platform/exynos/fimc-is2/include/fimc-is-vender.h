@@ -76,7 +76,10 @@ enum fimc_is_rom_type {
 struct fimc_is_rom_data {
 	u32 rom_type;
 	u32 rom_valid;
-	bool is_rom_read; 
+	bool is_rom_read;
+#ifdef USE_DIFFERENT_ISP_MODULE
+	bool use_different_isp_module;	/* Allow common module load, meant for different ISP also */
+#endif
 };
 
 enum fimc_is_rom_cal_index {

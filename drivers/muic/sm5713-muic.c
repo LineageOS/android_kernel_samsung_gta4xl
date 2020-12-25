@@ -664,10 +664,17 @@ static int sm5713_get_vbus_value(struct sm5713_muic_data *muic_data)
 		vol = 6;
 	else if ((vbus_voltage > 6500) && (vbus_voltage <= 7500))
 		vol = 7;
+#if defined(CONFIG_SEC_FACTORY)
+	else if ((vbus_voltage > 7500) && (vbus_voltage <= 8000))
+		vol = 8;
+	else if ((vbus_voltage > 8000) && (vbus_voltage <= 9500))
+		vol = 9;
+#else
 	else if ((vbus_voltage > 7500) && (vbus_voltage <= 8500))
 		vol = 8;
 	else if ((vbus_voltage > 8500) && (vbus_voltage <= 9500))
 		vol = 9;
+#endif
 	else if ((vbus_voltage > 9500) && (vbus_voltage <= 10500))
 		vol = 10;
 	else

@@ -411,13 +411,13 @@ static int vipx_debug_power_show(struct seq_file *file, void *unused)
 	pm = &debug->system->pm;
 
 	mutex_lock(&pm->lock);
-	if (pm->gating)
-		seq_puts(file, "gating : on\n");
+	if (pm->dvfs)
+		seq_puts(file, "dvfs : on\n");
 	else
-		seq_puts(file, "gating : off\n");
+		seq_puts(file, "dvfs : off\n");
 	mutex_unlock(&pm->lock);
 
-	seq_puts(file, "Command to change gating mode\n");
+	seq_puts(file, "Command to change dvfs mode\n");
 	seq_puts(file, " echo enable/disable > /d/vipx/power\n");
 
 	vipx_leave();
@@ -459,11 +459,11 @@ static ssize_t vipx_debug_power_write(struct file *filp,
 	command[size] = '\0';
 	if (sysfs_streq(command, "enable")) {
 		mutex_lock(&pm->lock);
-		pm->gating = true;
+		pm->dvfs = true;
 		mutex_unlock(&pm->lock);
 	} else if (sysfs_streq(command, "disable")) {
 		mutex_lock(&pm->lock);
-		pm->gating = false;
+		pm->dvfs = false;
 		mutex_unlock(&pm->lock);
 	} else {
 		ret = -EINVAL;
@@ -792,8 +792,8 @@ int vipx_debug_probe(struct vipx_device *device)
 	if (!debug->log_bin)
 		vipx_err("Failed to create log_bin debugfs file\n");
 
-	debug->devfreq = debugfs_create_file("devfreq", 0640, debug->root, debug,
-			&vipx_debug_devfreq_fops);
+	debug->devfreq = debugfs_create_file("devfreq", 0640, debug->root,
+			debug, &vipx_debug_devfreq_fops);
 	if (!debug->devfreq)
 		vipx_err("Failed to create devfreq debugfs file\n");
 

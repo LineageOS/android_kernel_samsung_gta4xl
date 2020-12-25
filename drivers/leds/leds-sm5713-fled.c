@@ -14,6 +14,8 @@
 #include <linux/of_gpio.h>
 #include <linux/mfd/sm5713.h>
 #include <linux/mfd/sm5713-private.h>
+#include <linux/kthread.h>
+#include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
@@ -318,6 +320,32 @@ static int sm5713_fled_close_flash(u8 fled_index)
  * "sm5713_fled_close_flash".
  */
 
+int sm5713_fled_prepare_flash_thread_func(void* fled_index)
+{
+	int ret = 0;
+	u8 fled_index_value = *(u8*)fled_index;
+
+	ret = sm5713_fled_prepare_flash(fled_index_value);
+	if(ret < 0){
+		pr_err("PREPARE_FLASH failed");
+		return ret;
+	}
+	kfree(fled_index);
+
+	return ret;
+}
+
+int sm5713_fled_run_prepare_flash_thread(u8 fled_index)
+{
+	struct task_struct* prepare_flash_task;
+	u8* index_data = (u8*)kzalloc(sizeof(u8),GFP_KERNEL);
+
+	*index_data = fled_index;
+	prepare_flash_task = kthread_run(sm5713_fled_prepare_flash_thread_func, index_data, "prepare_flash");
+
+	return 0;
+}
+
 int32_t sm5713_fled_mode_ctrl(u8 fled_index, int state)
 {
 	struct sm5713_fled_data *fled = g_sm5713_fled;
@@ -371,11 +399,11 @@ int32_t sm5713_fled_mode_ctrl(u8 fled_index, int state)
 
 	case SM5713_FLED_MODE_PREPARE_FLASH:
 		/* 9V -> 5V VBUS change */
-		ret = sm5713_fled_prepare_flash(fled_index);
+		ret = sm5713_fled_run_prepare_flash_thread(fled_index);
 		if (ret < 0)
-			pr_err("sm5713-fled: %s: SM5713_FLED_MODE_PREPARE_FLASH(%d) failed\n", __func__, state);
+			pr_err("sm5713-fled: %s: SM5713_FLED_MODE_PREPARE_FLASH(%d) thread failed to start\n", __func__, state);
 		else
-			pr_info("sm5713-fled: %s: SM5713_FLED_MODE_PREPARE_FLASH(%d) done\n", __func__, state);
+			pr_info("sm5713-fled: %s: SM5713_FLED_MODE_PREPARE_FLASH(%d) thread started \n", __func__, state);
 		break;
 
 	case SM5713_FLED_MODE_CLOSE_FLASH:

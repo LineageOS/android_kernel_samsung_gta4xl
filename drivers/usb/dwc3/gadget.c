@@ -2170,6 +2170,8 @@ static int dwc3_gadget_vbus_session(struct usb_gadget *g, int is_active)
 			dwc3_gadget_cable_connect(dwc, false);
 			dwc->start_config_issued = false;
 			dwc->gadget.speed = USB_SPEED_UNKNOWN;
+			dwc->gadget.state = USB_STATE_NOTATTACHED;
+			dwc->vbus_current = 0;
 			dwc->setup_packet_pending = false;
 #endif
 			ret = dwc3_gadget_run_stop_vbus(dwc, 0, false);
@@ -3501,23 +3503,42 @@ static void dwc3_gadget_linksts_change_interrupt(struct dwc3 *dwc,
 
 	printk("usb: %s : evtinfo = 0x%x link state = %d\n", __func__, evtinfo, next);
 	switch (next) {
-#ifdef CONFIG_USB_FIX_PHY_PULLUP_ISSUE
 	case DWC3_LINK_STATE_U0:
+#ifdef CONFIG_USB_FIX_PHY_PULLUP_ISSUE
+		/* This W/A patch made for Lhotse H/W bugs.(Need to remove) */
 		if (dwc->is_not_vbus_pad) {
 			phy_set(dwc->usb2_generic_phy, SET_DPPULLUP_ENABLE, NULL);
 			phy_set(dwc->usb3_generic_phy, SET_DPPULLUP_ENABLE, NULL);
 		}
-		break;
 #endif
+#ifdef CONFIG_MUIC_SM5713_BC1_2_CERTI
+		if (dwc->vbus_current == USB_CURRENT_SUSPENDED) {
+			if (dwc->gadget.state == USB_STATE_CONFIGURED) {
+				if (dwc->gadget.speed >= USB_SPEED_SUPER)
+					dwc->vbus_current = USB_CURRENT_SUPER_SPEED;
+				else
+					dwc->vbus_current = USB_CURRENT_HIGH_SPEED;
+			} else
+				dwc->vbus_current = USB_CURRENT_UNCONFIGURED;
+			schedule_work(&dwc->set_vbus_current_work);
+		}
+#endif
+		break;
 	case DWC3_LINK_STATE_U1:
 		if (dwc->speed == USB_SPEED_SUPER)
 			dwc3_suspend_gadget(dwc);
 		break;
 	case DWC3_LINK_STATE_U3:
+#ifdef CONFIG_MUIC_SM5713_BC1_2_CERTI
+		printk("usb: sending usb u3 suspend state\n");
+		dwc->vbus_current = USB_CURRENT_SUSPENDED;
+		schedule_work(&dwc->set_vbus_current_work);
+#else
 		if (dwc->gadget.state == USB_STATE_CONFIGURED) {
 			dwc->vbus_current = USB_CURRENT_UNCONFIGURED;
 			schedule_work(&dwc->set_vbus_current_work);
 		}
+#endif
 	case DWC3_LINK_STATE_U2:
 		dwc3_suspend_gadget(dwc);
 		break;
@@ -3537,6 +3558,18 @@ static void dwc3_gadget_linksts_change_interrupt(struct dwc3 *dwc,
 		}
 #endif
 		dwc3_resume_gadget(dwc);
+#ifdef CONFIG_MUIC_SM5713_BC1_2_CERTI
+		if (dwc->vbus_current == USB_CURRENT_SUSPENDED) {
+			if (dwc->gadget.state == USB_STATE_CONFIGURED) {
+				if (dwc->gadget.speed >= USB_SPEED_SUPER)
+					dwc->vbus_current = USB_CURRENT_SUPER_SPEED;
+				else
+					dwc->vbus_current = USB_CURRENT_HIGH_SPEED;
+			} else
+				dwc->vbus_current = USB_CURRENT_UNCONFIGURED;
+			schedule_work(&dwc->set_vbus_current_work);
+		}
+#endif
 		break;
 	default:
 		/* do nothing */

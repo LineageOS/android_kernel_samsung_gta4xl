@@ -4668,6 +4668,120 @@ static void aot_enable(void *dev_data)
 }
 #endif
 
+static int set_ap_change_mode(int mode, int enable)
+{
+	char tmp_addr[4] = {0xE8, 0x7F, 0x00, 0x10};
+	char send_data[4] = {0};
+	char recv_data[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+	char retry_cnt = 0;
+	int ret = 1;
+	switch (mode) {
+		case GAME_MODE:
+			tmp_addr[0] = 0xE0;
+			break;
+		case NOTE_MODE:
+			tmp_addr[0] = 0xE8;
+			break;
+		default:
+			I("%s: Invalid Mode\n", __func__);
+			return ret;
+	}
+
+	if (enable)
+		send_data[0] = 0x01;
+	else
+		send_data[0] = 0x00;
+	
+	do {
+		g_core_fp.fp_register_write(tmp_addr, DATA_LEN_4, send_data, 0);
+		usleep_range(1000, 1100);
+		g_core_fp.fp_register_read(tmp_addr, DATA_LEN_4, recv_data, 0);
+		retry_cnt++;
+	} while ((send_data[3] != recv_data[3] ||
+		send_data[2] != recv_data[2] ||
+		send_data[1] != recv_data[1] ||
+		send_data[0] != recv_data[0]) && retry_cnt < HIMAX_REG_RETRY_TIMES);
+
+	if (retry_cnt >= HIMAX_REG_RETRY_TIMES)
+		ret = 1;
+	else
+		ret = 0;
+
+	return ret;
+}
+
+static void set_game_mode(void *dev_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
+	char buf[16] = {0};
+	int ret = 0;
+
+	sec_cmd_set_default_result(sec);
+
+	switch (sec->cmd_param[0]) {
+		case 0:
+			I("%s: Unset Game Mode\n", __func__);
+			ret = set_ap_change_mode(GAME_MODE, 0);
+			break;
+		case 1:
+			I("%s: Set Game Mode\n", __func__);
+			ret = set_ap_change_mode(GAME_MODE, 1);
+			break;
+		default:
+			I("%s: Invalid Argument\n", __func__);
+			break;
+	}
+
+	if (ret) {
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		snprintf(buf, sizeof(buf), "NG");
+	} else {
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+		snprintf(buf, sizeof(buf), "OK");
+	}
+
+	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+	sec_cmd_set_cmd_exit(sec);
+
+	I("%s: %s\n", __func__, buf);
+}
+
+static void set_note_mode(void *dev_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
+	char buf[16] = {0};
+	int ret = 0;
+
+	sec_cmd_set_default_result(sec);
+
+	switch (sec->cmd_param[0]) {
+		case 0:
+			I("%s: Unset Note Mode\n", __func__);
+			ret = set_ap_change_mode(NOTE_MODE, 0);
+			break;
+		case 1:
+			I("%s: Set Note Mode\n", __func__);
+			ret = set_ap_change_mode(NOTE_MODE, 1);
+			break;
+		default:
+			I("%s: Invalid Argument\n", __func__);
+			break;
+	}
+
+	if (ret) {
+		sec->cmd_state = SEC_CMD_STATUS_FAIL;
+		snprintf(buf, sizeof(buf), "NG");
+	} else {
+		sec->cmd_state = SEC_CMD_STATUS_OK;
+		snprintf(buf, sizeof(buf), "OK");
+	}
+
+	sec_cmd_set_cmd_result(sec, buf, strnlen(buf, sizeof(buf)));
+	sec_cmd_set_cmd_exit(sec);
+
+	I("%s: %s\n", __func__, buf);
+}
+
 /*
  * read_support_feature function
  * returns the bit combination of specific feature that is supported.
@@ -4772,6 +4886,8 @@ struct sec_cmd sec_cmds[] = {
 #ifdef HX_SMART_WAKEUP
 	{SEC_CMD("aot_enable", aot_enable),},
 #endif
+	{SEC_CMD("set_game_mode", set_game_mode),},
+	{SEC_CMD("set_note_mode", set_note_mode),},
 	{SEC_CMD("not_support_cmd", not_support_cmd),},
 };
 

@@ -92,6 +92,9 @@ int pafstat_hw_sw_reset(void __iomem *base_reg);
 void pafstat_hw_s_lbctrl(void __iomem *base_reg, u32 width, u32 height);
 int pafstat_hw_g_fwin_stat(void __iomem *base_reg, void *buf, size_t len);
 int pafstat_hw_com_s_med_line(void __iomem *base_reg, int dist_pd_pixel);
+#ifdef USE_PDAF_MED_LINE_RESET
+void pafstat_hw_com_reset_med_line(void __iomem *base_reg, int dist_pd_pixel);
+#endif
 
 /* PAF RDMA */
 void fimc_is_hw_paf_common_config(void __iomem *base_reg_com, void __iomem *base_reg,

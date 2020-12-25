@@ -65,7 +65,7 @@ int vipx_system_fw_bootup(struct vipx_system *sys)
 	if (ret)
 		goto p_err;
 
-	vipx_pm_set_idle(&sys->pm);
+	vipx_pm_request_idle(&sys->pm);
 	vipx_leave();
 	return 0;
 p_err:

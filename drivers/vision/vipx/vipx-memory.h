@@ -45,12 +45,13 @@ struct vipx_buffer {
 	} m;
 
 	enum dma_data_direction		direction;
-	struct dma_buf                  *dbuf;
-	struct dma_buf_attachment       *attachment;
-	struct sg_table                 *sgt;
+	struct dma_buf			*dbuf;
+	struct dma_buf_attachment	*attachment;
+	struct sg_table			*sgt;
 
-	dma_addr_t                      dvaddr;
-	void                            *kvaddr;
+	dma_addr_t			dvaddr;
+	void				*kvaddr;
+	bool				cached;
 
 	struct vs4l_roi                 roi;
 };

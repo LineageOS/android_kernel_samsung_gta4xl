@@ -17,7 +17,7 @@ fw-external-$(CONFIG_EXYNOS9610_ACPM) += exynos9610_acpm_tmu.fw
 fw-external-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_DSX) += tsp_synaptics/synaptics_b0_h.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y761_dream1.fw
 fw-external-$(CONFIG_TOUCHSCREEN_MELFAS_MSS100) += tsp_melfas/mss100_a51.fw tsp_melfas/mss100_a51_old.fw \
-											tsp_melfas/mss100_m31.fw
+											tsp_melfas/mss100_m31.fw tsp_melfas/mss100_m21.fw tsp_melfas/mss100_m31s.fw
 fw-external-$(CONFIG_TOUCHSCREEN_NOVATEK_NT36672A) += tsp_novatek/nt36672a_xcoverpro.fw
 fw-external-$(CONFIG_TOUCHSCREEN_HIMAX_CHIPSET) += tsp_himax/hx83102e_gta4xl.fw tsp_himax/hx83102e_gta4xl_old.fw
 fw-external-$(CONFIG_EPEN_WACOM_W9019) += epen/wacom9019_gta4xl.fw
@@ -39,6 +39,7 @@ fw-external-$(CONFIG_SENSORS_SSP_XCOVERPRO) += sensorhub/shub_exynos9611_g715.fw
 fw-external-$(CONFIG_SENSORS_SSP_GTA4XL) += sensorhub/shub_exynos9611_gta4xl.fw
 fw-external-$(CONFIG_SENSORS_SSP_M31) += sensorhub/shub_ramen_m31.fw
 fw-external-$(CONFIG_SENSORS_SSP_M21) += sensorhub/shub_ramen_m21.fw
+fw-external-$(CONFIG_SENSORS_SSP_M31S) += sensorhub/shub_ramen_m31s.fw
 
 fw-shipped-$(CONFIG_FIVE_TEE_DRIVER) += five/ffffffff000000000000000000000072.tlbin
 
@@ -109,6 +110,3 @@ targets := $(patsubst $(obj)/%,%, \
 # Without this, built-in.o won't be created when it's empty, and the
 # final vmlinux link will fail.
 obj- := dummy
-
-# SPU signature verify
-obj-y += spu_verify/

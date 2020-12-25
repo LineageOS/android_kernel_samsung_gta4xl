@@ -78,7 +78,8 @@ void mms_reset_work(struct work_struct *work)
 			input_sync(info->input_dev);
 		}
 
-		if (info->lowpower_mode || ((info->ed_enable || info->pocket_enable) && info->dtdata->support_protos)) {
+		if (info->lowpower_mode || ((info->ed_enable || info->pocket_enable) && info->dtdata->support_protos) ||
+			info->fod_lp_mode) {
 			ret = mms_lowpower_mode(info, TO_LOWPOWER_MODE);
 			if (ret < 0) {
 				input_err(true, &info->client->dev, "%s: failed to reset\n", __func__);
@@ -552,7 +553,8 @@ static void mms_input_close(struct input_dev *dev)
 		input_sync(info->input_dev);
 	}
 
-	if (info->lowpower_mode || ((info->ed_enable || info->pocket_enable) && info->dtdata->support_protos))
+	if (info->lowpower_mode || ((info->ed_enable || info->pocket_enable) && info->dtdata->support_protos) ||
+		info->fod_lp_mode)
 		mms_lowpower_mode(info, TO_LOWPOWER_MODE);
 	else
 		mms_disable(info);
@@ -1834,8 +1836,7 @@ static int mms_suspend(struct device *dev)
 {
 	struct mms_ts_info *info = dev_get_drvdata(dev);
 
-	if (info->lowpower_mode)
-		reinit_completion(&info->resume_done);
+	reinit_completion(&info->resume_done);
 
 	return 0;
 }
@@ -1844,8 +1845,7 @@ static int mms_resume(struct device *dev)
 {
 	struct mms_ts_info *info = dev_get_drvdata(dev);
 
-	if (info->lowpower_mode)
-		complete_all(&info->resume_done);
+	complete_all(&info->resume_done);
 
 	return 0;
 }

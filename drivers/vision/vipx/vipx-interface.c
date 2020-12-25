@@ -186,7 +186,7 @@ static int __vipx_interface_send_mailbox(struct vipx_interface *itf,
 	size = itask->param2;
 	type = itask->param3;
 
-	vipx_pm_set_active(&itf->system->pm);
+	vipx_pm_request_busy(&itf->system->pm);
 
 	spin_lock_irqsave(&itf->process_barrier, process_flags);
 	itf->process = itask;
@@ -231,7 +231,7 @@ static int __vipx_interface_send_mailbox(struct vipx_interface *itf,
 	itf->process = NULL;
 	spin_unlock_irqrestore(&itf->process_barrier, process_flags);
 
-	vipx_pm_set_idle(&itf->system->pm);
+	vipx_pm_request_idle(&itf->system->pm);
 	vipx_leave();
 	return ret;
 p_err_process:
@@ -241,7 +241,7 @@ p_err_process:
 
 	itf->process = NULL;
 	spin_unlock_irqrestore(&itf->process_barrier, process_flags);
-	vipx_pm_set_idle(&itf->system->pm);
+	vipx_pm_request_idle(&itf->system->pm);
 	return ret;
 }
 

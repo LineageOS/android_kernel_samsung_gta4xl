@@ -49,6 +49,12 @@ config SENSORS_SSP_M21
 	help
 	  If you want to use sensor hub for m21 project, it should be set.
 
+config SENSORS_SSP_M31S
+	tristate "Sensors ssp m31s"
+	default n
+	help
+	  If you want to use sensor hub for m31s project, it should be set.
+
 config SENSORS_SSP_GYROFILE_FOR_MAG
 	tristate "use gyro cal file for mag cal"
 	default n	
@@ -196,6 +202,24 @@ config SENSORS_SX9360_SUB
 	  This option enables grip sensors using
 	  SemTech sx9330 sub device driver.
 	  Say N here if you do not use sx9330 sub.
+
+config SENSORS_ISG5320A
+	depends on I2C
+	tristate "ISG5320A grip"
+	default n
+	help
+	  If you say yes here if you use ISG5320A for grip.
+	  This option enables grip sensors using
+	  IMAGIS ISG5320A device driver for grip.
+
+config SENSORS_ISG5320A_SUB
+	depends on I2C
+	tristate "ISG5320A grip sub"
+	default n
+	help
+	  If you say yes here if you use ISG5320A_SUB for grip sub.
+	  This option enables grip sensors using
+	  IMAGIS ISG5320A_SUB device driver for grip sub.
 	  
 source "drivers/sensorhub/factory/Kconfig"
 

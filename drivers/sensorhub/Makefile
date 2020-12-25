@@ -13,3 +13,5 @@ obj-$(CONFIG_SENSORS_A96T3X6_SUB)	+= a96t3x6_sub.o
 obj-$(CONFIG_SENSORS_TC3XXK)  		+= tc3xxk.o
 obj-$(CONFIG_SENSORS_SX9360)  		+= sx9360.o
 obj-$(CONFIG_SENSORS_SX9360_SUB)	+= sx9360_sub.o
+obj-$(CONFIG_SENSORS_ISG5320A)		+= isg5320a.o
+obj-$(CONFIG_SENSORS_ISG5320A_SUB)	+= isg5320a_sub.o

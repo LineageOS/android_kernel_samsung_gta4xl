@@ -128,6 +128,7 @@ struct exynos_platform_fimc_is_module {
 	bool power_seq_dt;
 	u32 internal_vc[CSI_VIRTUAL_CH_MAX];
 	u32 vc_buffer_offset[CSI_VIRTUAL_CH_MAX];
+	u32 sensor_module_type;
 };
 
 extern int exynos_fimc_is_module_pins_cfg(struct fimc_is_module_enum *module,

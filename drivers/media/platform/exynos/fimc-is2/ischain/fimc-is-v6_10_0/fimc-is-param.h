@@ -872,7 +872,8 @@ struct param_sensor_config {
 	u32	calibrated_width; /* sensor cal size */
 	u32	calibrated_height;
 	u32	early_config_lock;
-	u32	reserved[PARAMETER_MAX_MEMBER-17];
+	u32	mono_mode;		/* use mono sensor */
+	u32	reserved[PARAMETER_MAX_MEMBER-18];
 	u32	err;
 };
 

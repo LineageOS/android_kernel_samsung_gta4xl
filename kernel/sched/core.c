@@ -46,6 +46,11 @@
 #include <trace/events/sched.h>
 #include "walt.h"
 
+
+#ifdef CONFIG_FAST_TRACK
+#include <cpu/ftt/ftt.h>
+#endif
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 /*
@@ -2247,6 +2252,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 #endif
 	walt_init_new_task_load(p);
 
+#ifdef CONFIG_FAST_TRACK
+	init_task_ftt_info(p);
+#endif
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
 #endif

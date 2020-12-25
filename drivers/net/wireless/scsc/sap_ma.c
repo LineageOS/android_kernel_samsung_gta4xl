@@ -204,7 +204,7 @@ static int slsi_rx_amsdu_deaggregate(struct net_device *dev, struct sk_buff *skb
 		}
 		__skb_queue_tail(msdu_list, subframe);
 	}
-	slsi_kfree_skb(skb);
+	consume_skb(skb);
 	return 0;
 }
 
@@ -284,7 +284,7 @@ void slsi_rx_data_deliver_skb(struct slsi_dev *sdev, struct net_device *dev, str
 			if (is_multicast_ether_addr(ehdr->h_dest) &&
 				!compare_ether_addr(ehdr->h_source, dev->dev_addr)) {
 				SLSI_NET_DBG2(dev, SLSI_RX, "drop locally generated multicast frame relayed back by AP\n");
-				slsi_kfree_skb(rx_skb);
+				consume_skb(rx_skb);
 				continue;
 			}
 		}

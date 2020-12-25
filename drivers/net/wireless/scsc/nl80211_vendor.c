@@ -1424,6 +1424,10 @@ static int slsi_set_bssid_blacklist(struct wiphy *wiphy, struct wireless_dev *wd
 				goto exit;
 			}
 
+			if (nla_len(attr) < ETH_ALEN) {
+				ret = -EINVAL;
+				goto exit;
+			}
 			bssid = (u8 *)nla_data(attr);
 
 			SLSI_ETHER_COPY(acl_data->mac_addrs[i].addr, bssid);
@@ -1511,6 +1515,10 @@ static int slsi_start_keepalive_offload(struct wiphy *wiphy, struct wireless_dev
 			break;
 
 		case MKEEP_ALIVE_ATTRIBUTE_IP_PKT:
+			if (nla_len(attr) < ip_pkt_len) {
+				 r = -EINVAL;
+				 goto exit;
+			}
 			ip_pkt = (u8 *)nla_data(attr);
 			break;
 
@@ -1522,10 +1530,18 @@ static int slsi_start_keepalive_offload(struct wiphy *wiphy, struct wireless_dev
 			break;
 
 		case MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR:
+			if (nla_len(attr) < ETH_ALEN) {
+				r = -EINVAL;
+				goto exit;
+			}
 			dst_mac_addr = (u8 *)nla_data(attr);
 			break;
 
 		case MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR:
+			if (nla_len(attr) < ETH_ALEN) {
+				r = -EINVAL;
+				goto exit;
+			}
 			src_mac_addr = (u8 *)nla_data(attr);
 			break;
 
@@ -3670,13 +3686,13 @@ char *slsi_frame_transmit_failure_message_type(int message_type)
 char *slsi_get_scan_type(int scan_type)
 {
 	switch (scan_type) {
-	case 11:
+	case FAPI_SCANTYPE_SOFT_CACHED_ROAMING_SCAN:
 		return "Soft Cached scan";
-	case 12:
+	case FAPI_SCANTYPE_SOFT_FULL_ROAMING_SCAN:
 		return "Soft Full scan";
-	case 13:
+	case FAPI_SCANTYPE_HARD_CACHED_ROAMING_SCAN:
 		return "Hard Cached scan";
-	case 14:
+	case FAPI_SCANTYPE_HARD_FULL_ROAMING_SCAN:
 		return "Hard Full scan";
 	default:
 		return "Undefined";
@@ -4674,8 +4690,7 @@ static int slsi_get_tx_pkt_fates(struct wiphy *wiphy, struct wireless_dev *wdev,
 				ret = -EINVAL;
 				goto exit;
 			}
-			if (req_count > MAX_FATE_LOG_LEN)
-			{
+			if (req_count > MAX_FATE_LOG_LEN) {
 				SLSI_ERR(sdev, "Found invalid req_count %d for SLSI_ENHANCED_LOGGING_ATTRIBUTE_PKT_FATE_NUM", req_count);
 				ret = -EINVAL;
 				goto exit;
@@ -4748,8 +4763,7 @@ static int slsi_get_rx_pkt_fates(struct wiphy *wiphy, struct wireless_dev *wdev,
 				ret = -EINVAL;
 				goto exit;
 			}
-			if (req_count > MAX_FATE_LOG_LEN)
-			{
+			if (req_count > MAX_FATE_LOG_LEN) {
 				SLSI_ERR(sdev, "Found invalid req_count %d for SLSI_ENHANCED_LOGGING_ATTRIBUTE_PKT_FATE_NUM", req_count);
 				ret = -EINVAL;
 				goto exit;

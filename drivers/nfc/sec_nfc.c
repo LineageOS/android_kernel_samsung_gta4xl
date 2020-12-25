@@ -77,6 +77,7 @@ struct sec_nfc_info {
 	struct sec_nfc_platform_data *pdata;
 	struct sec_nfc_i2c_info i2c_info;
 	struct wake_lock nfc_wake_lock;
+	struct wake_lock nfc_clk_wake_lock;
 	bool clk_ctl;
 	bool clk_state;
 	struct platform_device *pdev;
@@ -471,14 +472,20 @@ static irqreturn_t sec_nfc_clk_irq_thread(int irq, void *dev_id)
 			NFC_LOG_ERR("clock enable failed\n");
 			return IRQ_HANDLED;
 		}
-	} else
+		if(!wake_lock_active(&info->nfc_clk_wake_lock))
+			wake_lock(&info->nfc_clk_wake_lock);
+	} else {
 		clk_disable_unprepare(pdata->clk);
+		if (wake_lock_active(&info->nfc_clk_wake_lock))
+			wake_unlock(&info->nfc_clk_wake_lock);
+	}
 
 	info->clk_state = value;
 
 	return IRQ_HANDLED;
 }
 
+#if 0
 void sec_nfc_clk_ctl_enable(struct sec_nfc_info *info)
 {
 	struct sec_nfc_platform_data *pdata = info->pdata;
@@ -490,7 +497,6 @@ void sec_nfc_clk_ctl_enable(struct sec_nfc_info *info)
 		return;
 
 	info->clk_state = false;
-	enable_irq(pdata->clk_irq);
 	info->clk_ctl = true;
 }
 
@@ -498,20 +504,22 @@ void sec_nfc_clk_ctl_disable(struct sec_nfc_info *info)
 {
 	struct sec_nfc_platform_data *pdata = info->pdata;
 
+	if (wake_lock_active(&info->nfc_clk_wake_lock))
+		wake_unlock(&info->nfc_clk_wake_lock);
+
 	if (!info->clk_ctl)
 		return;
 
 	if (!pdata->clk)
 		return;
 
-	disable_irq(pdata->clk_irq);
 	if (info->clk_state)
 		clk_disable_unprepare(pdata->clk);
 
 	info->clk_state = false;
 	info->clk_ctl = false;
 }
-
+#endif
 static void sec_nfc_set_mode(struct sec_nfc_info *info,
 					enum sec_nfc_mode mode)
 {
@@ -542,11 +550,11 @@ static void sec_nfc_set_mode(struct sec_nfc_info *info,
 	if (mode != SEC_NFC_MODE_OFF) {
 		msleep(SEC_NFC_VEN_WAIT_TIME);
 		gpio_set_value(pdata->ven, SEC_NFC_PW_ON);
-		sec_nfc_clk_ctl_enable(info);
+		/*sec_nfc_clk_ctl_enable(info);*/
 		enable_irq_wake(info->i2c_info.i2c_dev->irq);
 		msleep(SEC_NFC_VEN_WAIT_TIME/2);
 	} else {
-		sec_nfc_clk_ctl_disable(info);
+		/*sec_nfc_clk_ctl_disable(info);*/
 		disable_irq_wake(info->i2c_info.i2c_dev->irq);
 	}
 
@@ -603,7 +611,7 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 
-// [START] NPT
+/*[START] NPT*/
 	case SEC_NFC_SET_NPT_MODE:
 		NFC_LOG_INFO("NPT: VEN=%d, FIRM:%d\n", gpio_get_value(pdata->ven),
 					gpio_get_value(pdata->firm));
@@ -615,7 +623,7 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd,
 			info->i2c_info.read_irq = SEC_NFC_SKIP;
 			mutex_unlock(&info->i2c_info.read_mutex);
 			gpio_set_value(pdata->ven, SEC_NFC_PW_ON);
-			sec_nfc_clk_ctl_enable(info);
+			/*sec_nfc_clk_ctl_enable(info);*/
 			msleep(20);
 			gpio_set_value(pdata->firm, SEC_NFC_FW_ON);
 			enable_irq_wake(info->i2c_info.i2c_dev->irq);
@@ -624,11 +632,11 @@ static long sec_nfc_ioctl(struct file *file, unsigned int cmd,
 			info->mode = SEC_NFC_MODE_OFF;
 			gpio_set_value(pdata->firm, SEC_NFC_FW_OFF);
 			gpio_set_value(pdata->ven, SEC_NFC_PW_OFF);
-			sec_nfc_clk_ctl_disable(info);
+			/*sec_nfc_clk_ctl_disable(info);*/
 			disable_irq_wake(info->i2c_info.i2c_dev->irq);
 		}
 		break;
-// [END] NPT
+/*[END] NPT*/
 
 	default:
 		NFC_LOG_ERR("NPT: Unknown ioctl 0x%x\n", cmd);
@@ -668,6 +676,9 @@ static int sec_nfc_close(struct inode *inode, struct file *file)
 {
 	struct sec_nfc_info *info = container_of(file->private_data,
 						struct sec_nfc_info, miscdev);
+
+	if (wake_lock_active(&info->nfc_clk_wake_lock))
+		wake_unlock(&info->nfc_clk_wake_lock);
 
 	nfc_state_print(info);
 
@@ -944,6 +955,10 @@ static int __sec_nfc_probe(struct device *dev)
 	info->mode = SEC_NFC_MODE_OFF;
 
 	mutex_init(&info->mutex);
+
+	wake_lock_init(&info->nfc_wake_lock, WAKE_LOCK_SUSPEND, "nfc_wake_lock");
+	wake_lock_init(&info->nfc_clk_wake_lock, WAKE_LOCK_SUSPEND, "nfc_clk_wake_lock");
+
 	dev_set_drvdata(dev, info);
 
 	info->miscdev.minor = MISC_DYNAMIC_MINOR;
@@ -986,7 +1001,8 @@ static int __sec_nfc_probe(struct device *dev)
 				SEC_NFC_DRIVER_NAME, info);
 		if (ret < 0)
 			NFC_LOG_ERR("probe() failed to register CLK REQ IRQ handler\n");
-		disable_irq(pdata->clk_irq);
+		else
+			enable_irq_wake(pdata->clk_irq);
 	}
 
 	ret = gpio_request(pdata->ven, "nfc_ven");
@@ -1004,8 +1020,6 @@ static int __sec_nfc_probe(struct device *dev)
 		}
 		gpio_direction_output(pdata->firm, SEC_NFC_FW_OFF);
 	}
-
-	wake_lock_init(&info->nfc_wake_lock, WAKE_LOCK_SUSPEND, "nfc_wake_lock");
 
 #ifdef FEATURE_SEC_NFC_TEST
 	g_nfc_info = info;

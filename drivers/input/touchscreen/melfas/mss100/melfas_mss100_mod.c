@@ -558,33 +558,27 @@ void mms_input_event_handler(struct mms_ts_info *info, u8 sz, u8 *buf)
 				input_dbg(false, &client->dev, "%s - Key : ID[%d] Code[%d] State[%d]\n",
 					__func__, id, key_code, state);
 			}
-		}/* else if (type == MIP4_EVENT_INPUT_TYPE_PROXIMITY) {
-			int hover_id;
-			int hover_state = 0;
+		} else if (type == MIP4_EVENT_INPUT_TYPE_PROXIMITY) {
+			if(info->dtdata->support_model_feature) { /* support events for firmware unchanged hover event types */
+				int hover_id;
+				int hover_state = 0;
 
-			for (hover_id = 0; hover_id < 3; hover_id++) {
-				if ((packet[10] & 0x0F) & (0x01 << (hover_id)))
-					hover_state = hover_id + 1;
-			}
+				for (hover_id = 1; hover_id < 4; hover_id++) {
+					if (packet[1] & (0x01 << (hover_id + 1)))
+						hover_state = hover_id;
+				}
 
-			if (info->dtdata->support_ear_detect && info->ed_enable) {
-				if (info->ic_status == LP_MODE) {
-					if (packet[10] & 0x0F << 3)
-						hover_state = 4;
-					else
-						hover_state = 5;
-					input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, hover_state);
-					input_sync(info->input_dev_proximity);
-					input_info(true, &client->dev, "%s: LPM : HOVER DETECT(%d) %d\n", __func__, hover_state, packet[10] & 0x0F);
-				} else if (info->ic_status == LP_ENTER) {
-					input_info(true, &client->dev, "%s: LPM : SKIP HOVER DETECT(%d) %d\n", __func__, hover_state, packet[10] & 0x0F);
-				} else {
-					input_info(true, &client->dev, "%s: HOVER DETECT(%d) %d\n", __func__, hover_state, packet[10] & 0x0F);
-					input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, hover_state);
-					input_sync(info->input_dev_proximity);
+				if (info->dtdata->support_ear_detect && info->ed_enable) {
+					if (info->ic_status >= LP_MODE) {
+						input_info(true, &client->dev, "%s: LPM : SKIP HOVER DETECT(%d)\n", __func__, hover_state);
+					} else {
+						input_info(true, &client->dev, "%s: HOVER DETECT(%d)\n", __func__, hover_state);
+						input_report_abs(info->input_dev_proximity, ABS_MT_CUSTOM, hover_state);
+						input_sync(info->input_dev_proximity);
+					}
 				}
 			}
-		}*/
+		}
 	}
 
 	input_sync(info->input_dev);
@@ -772,6 +766,7 @@ int mms_parse_devicetree(struct device *dev, struct mms_ts_info *info)
 	info->dtdata->support_protos = of_property_read_bool(np, "melfas,support_protos");
 	info->dtdata->regulator_boot_on = of_property_read_bool(np, "melfas,regulator_boot_on");
 	info->dtdata->support_dual_fw = of_property_read_bool(np, "melfas,support_dual_fw");
+	info->dtdata->support_model_feature = of_property_read_bool(np, "melfas,support_model_feature");
 
 	if (info->dtdata->support_dual_fw) {
 		if ((lcdtype >> 4) == 0x80004) /* old 80 00 4X   new 80 00 8X*/

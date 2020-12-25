@@ -214,6 +214,7 @@ enum fimc_is_ex_mode {
 	EX_3DHDR = 6,
 	EX_CROP_ZOOM = 8,
 	EX_SEAMLESS_TETRA = 9,	/* for extending to seamless fuction such as 3DHDR + Seamless */
+	EX_LOW_RES_TETRA = 10,	/* For EXTEND_SENSOR_MODE_CROPPED_REMOSAIC */
 };
 
 struct fimc_is_sensor_cfg {

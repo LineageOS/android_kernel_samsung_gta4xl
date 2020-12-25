@@ -43,6 +43,7 @@
 #define GNSS_IOCTL_CHANGE_SENSOR_GPIO	_IO(GNSS_IOC_MAGIC, 0x05)
 #define GNSS_IOCTL_CHANGE_TCXO_MODE		_IO(GNSS_IOC_MAGIC, 0x06)
 #define GNSS_IOCTL_SET_SENSOR_POWER		_IO(GNSS_IOC_MAGIC, 0x07)
+#define GNSS_IOCTL_PURE_RELEASE			_IO(GNSS_IOC_MAGIC, 0x50)
 
 enum sensor_power {
 	SENSOR_OFF,
@@ -325,6 +326,7 @@ struct gnssctl_ops {
 	int (*change_sensor_gpio)(struct gnss_ctl *);
 	int (*set_sensor_power)(struct gnss_ctl *, enum sensor_power);
 	int (*req_bcmd)(struct gnss_ctl *, u16, u16, u32, u32);
+	int (*gnss_pure_release)(struct gnss_ctl *);
 };
 
 struct gnss_ctl {

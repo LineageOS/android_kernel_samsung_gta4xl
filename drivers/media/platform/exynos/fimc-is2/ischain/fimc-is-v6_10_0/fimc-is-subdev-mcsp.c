@@ -208,7 +208,7 @@ p_err:
 	return ret;
 }
 
-#define MXP_RATIO_UP	(10)
+#define MXP_RATIO_UP	(12)
 #define MXP_RATIO_DOWN	(32)
 
 static int fimc_is_ischain_mxp_adjust_crop(struct fimc_is_device_ischain *device,
@@ -219,8 +219,8 @@ static int fimc_is_ischain_mxp_adjust_crop(struct fimc_is_device_ischain *device
 
 	if (*output_crop_w > input_crop_w * MXP_RATIO_UP) {
 		mwarn("Cannot be scaled up beyond %d times(%d -> %d)",
-			device, MXP_RATIO_UP, input_crop_h, *output_crop_h);
-		*output_crop_h = input_crop_h * MXP_RATIO_UP;
+			device, MXP_RATIO_UP, input_crop_w, *output_crop_w);
+		*output_crop_w = input_crop_w * MXP_RATIO_UP;
 		changed |= 0x01;
 	}
 
@@ -309,6 +309,7 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 	struct fimc_is_fmt *format, *tmp_format;
 	struct param_otf_input *otf_input = NULL;
 	u32 crange;
+	u32 flip = mcs_output->flip;
 	struct fimc_is_crop incrop_cfg, otcrop_cfg;
 
 	FIMC_BUG(!queue);
@@ -363,6 +364,15 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 		}
 	}
 
+	if (frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0] != mcs_output->flip) {
+		flip = frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0];
+		queue->framecfg.flip = flip << 1;
+		mdbg_pframe("flip is changed(%d->%d)\n",
+			device, subdev, frame,
+			mcs_output->flip,
+			flip);
+	}
+
 	mcs_output->otf_format = OTF_OUTPUT_FORMAT_YUV422;
 	mcs_output->otf_bitwidth = OTF_OUTPUT_BIT_WIDTH_8BIT;
 	mcs_output->otf_order = OTF_OUTPUT_ORDER_BAYER_GR_BG;
@@ -388,7 +398,7 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 					queue->framecfg.bytesperline[1]), 16);
 
 	mcs_output->yuv_range = crange;
-	mcs_output->flip = (u32)queue->framecfg.flip >> 1; /* Caution: change from bitwise to enum */
+	mcs_output->flip = flip;
 
 #ifdef ENABLE_HWFC
 	if (test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state))
@@ -526,6 +536,7 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 	u32 index, lindex, hindex, indexes;
 	u32 pixelformat = 0;
 	u32 *target_addr;
+	bool change_flip = false;
 	bool change_pixelformat = false;
 
 	device = (struct fimc_is_device_ischain *)device_data;
@@ -599,6 +610,9 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 			pixelformat = node->pixelformat;
 		}
 
+		if (ldr_frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0] != mcs_output->flip)
+			change_flip = true;
+
 		inparm.x = mcs_output->crop_offset_x;
 		inparm.y = mcs_output->crop_offset_y;
 		inparm.w = mcs_output->crop_width;
@@ -618,6 +632,7 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 		if (!COMPARE_CROP(incrop, &inparm) ||
 			!COMPARE_CROP(otcrop, &otparm) ||
 			CHECK_STRIPE_CFG(&ldr_frame->stripe_info) ||
+			change_flip ||
 			change_pixelformat ||
 			test_bit(FIMC_IS_ISCHAIN_MODE_CHANGED, &device->state) ||
 			!test_bit(FIMC_IS_SUBDEV_RUN, &subdev->state) ||

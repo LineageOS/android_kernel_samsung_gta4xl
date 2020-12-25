@@ -786,11 +786,11 @@ int sensor_imx616_cis_mode_change_seamless(struct v4l2_subdev *subdev, u32 mode)
 
 	/* Transition to 3HDR or seamless-tetra mode */
 	if (IS_3HDR_SEAMLESS(cis, mode)) {
-		/* info("%s: 0x3020, 0x01\n", __func__);*/
+		/* info("%s: 0x3020, 0x01\n", __func__); */
 		ret = fimc_is_sensor_write8(client, 0x3020, 0x01);
 		CHECK_ERR_GOTO(ret < 0, p_err_i2c, "transition cmd fail!!");
 	} else {
-		/* info("%s: 0x3020, 0x00\n", __func__);*/
+		/* info("%s: 0x3020, 0x00\n", __func__); */
 		ret = fimc_is_sensor_write8(client, 0x3020, 0x00);
 		CHECK_ERR_GOTO(ret < 0, p_err_i2c, "transition cmd fail!!");
 	}
@@ -801,6 +801,15 @@ int sensor_imx616_cis_mode_change_seamless(struct v4l2_subdev *subdev, u32 mode)
 	ret = sensor_cis_set_registers(subdev, sensor_imx616_setfiles[transition_mode],
 					sensor_imx616_setfile_sizes[transition_mode]);
 	CHECK_ERR_GOTO(ret < 0, p_err_i2c, "seamless transition settings fail!!");
+
+	/*
+	 * Enabling fast transition leads to change fps unintentionally due to a GPH bug
+	 * So, disable fast transition right after mode transition
+	 */
+	if (IS_3HDR_SEAMLESS(cis, mode)) {
+		ret = fimc_is_sensor_write8(client, 0x3020, 0x00);
+		CHECK_ERR_GOTO(ret < 0, p_err_i2c, "transition cmd fail!!");
+	}
 
 	dbg_sensor(1, "[%s] mode changed(%d)\n", __func__, mode);
 

@@ -18,7 +18,7 @@ struct vipx_system;
 struct vipx_pm {
 	struct vipx_system	*system;
 	struct mutex		lock;
-	bool			gating;
+	bool			dvfs;
 	unsigned int		active_count;
 #if defined(CONFIG_PM_DEVFREQ)
 	struct pm_qos_request	cam_qos_req;
@@ -36,8 +36,8 @@ int vipx_pm_qos_update(struct vipx_pm *pm, int request_qos);
 void vipx_pm_qos_suspend(struct vipx_pm *pm);
 void vipx_pm_qos_resume(struct vipx_pm *pm);
 
-void vipx_pm_set_active(struct vipx_pm *pm);
-void vipx_pm_set_idle(struct vipx_pm *pm);
+void vipx_pm_request_busy(struct vipx_pm *pm);
+void vipx_pm_request_idle(struct vipx_pm *pm);
 int vipx_pm_open(struct vipx_pm *pm);
 void vipx_pm_close(struct vipx_pm *pm);
 int vipx_pm_probe(struct vipx_system *sys);

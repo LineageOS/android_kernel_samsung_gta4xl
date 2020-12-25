@@ -31,6 +31,11 @@
 #undef OVERFLOW_PANIC_ENABLE_CSIS                             /* Not Support Kernel Panic when CSIS OVERFLOW */
 
 
+/* Temp. HACK Code. "fimc-is-eeprom-front-hi2021q_v001.h" is can not included fimc_is_sysfs */
+/* hi2021q XTALK Cal Data */
+#define EEP_XTALK_CAL_START_ADDR_FRONT  0x1620
+#define EEP_XTALK_CAL_DATA_SIZE_FRONT   (560)
+
 /***** DDK - DRIVER INTERFACE *****/
 #define USE_AI_CAMERA_INTERFACE     (1)                       /* This feature since A7 2018 */
 #define USE_MFHDR_CAMERA_INTERFACE  (1)                       /* This feature since A7 2018 */

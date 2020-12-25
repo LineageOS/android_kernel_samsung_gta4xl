@@ -31,6 +31,8 @@
 #include "fimc-is-vender-rom-config_mms_v21.h"
 #elif defined(CONFIG_CAMERA_MMS_V31)
 #include "fimc-is-vender-rom-config_mms_v31.h"
+#elif defined(CONFIG_CAMERA_MMS_V31S)
+#include "fimc-is-vender-rom-config_mms_v31s.h"
 #elif defined(CONFIG_CAMERA_XXS_VPRO)
 #include "fimc-is-vender-rom-config_xxs_vpro.h"
 #elif defined(CONFIG_CAMERA_ATS_V04)

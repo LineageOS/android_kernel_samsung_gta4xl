@@ -93,6 +93,8 @@ enum is_scenario_id {
 enum is_subscenario_id {
 	ISS_SUB_SCENARIO_STILL_PREVIEW = 0,			/* 0: still preview */
 	ISS_SUB_SCENARIO_VIDEO = 1,				/* 1: video */
+	ISS_SUB_SCENARIO_STILL_FULL_PREVIEW_WDR_AUTO = 2,	/* 2: Full resolution Preview (HDR Auto/Off) */
+	ISS_SUB_SCENARIO_STILL_PREVIEW_PRO_MODE = 3,	/* 3: ProMode Preview (HDR Off) : just Innovative project */
 
 	ISS_SUB_SCENARIO_VIDEO_HIGH_SPEED = 4,			/* 4: 120 fps recording (HDR OFF) */
 	ISS_SUB_SCENARIO_FHD_120FPS = ISS_SUB_SCENARIO_VIDEO_HIGH_SPEED,

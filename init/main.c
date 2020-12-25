@@ -573,11 +573,15 @@ static void __init rkp_init(void)
 	rkp_init_data.vmalloc_end = (u64)high_memory;
 	rkp_init_data.init_mm_pgd = (u64)__pa(swapper_pg_dir);
 	rkp_init_data.id_map_pgd = (u64)__pa(idmap_pg_dir);
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 	rkp_init_data.tramp_pgd = (u64)__pa(tramp_pg_dir);
+#endif
 #ifdef CONFIG_UH_RKP_FIMC_CHECK
 	rkp_init_data.no_fimc_verify = 1;
 #endif
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 	rkp_init_data.tramp_valias = (u64)TRAMP_VALIAS;
+#endif
 	rkp_init_data.zero_pg_addr = (u64)__pa(empty_zero_page);
 	rkp_s_bitmap_ro = (sparse_bitmap_for_kernel_t *)
 		uh_call(UH_APP_RKP, RKP_GET_RO_BITMAP, 0, 0, 0, 0);
@@ -690,9 +694,11 @@ asmlinkage __visible void __init start_kernel(void)
 	build_all_zonelists(NULL);
 	page_alloc_init();
 
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	pr_notice("Kernel command line: %s\n", boot_command_line);
 	/* parameters may set static keys */
 	jump_label_init();
+#endif
 	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
 				  static_command_line, __start___param,

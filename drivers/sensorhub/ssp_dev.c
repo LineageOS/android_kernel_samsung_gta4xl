@@ -441,15 +441,30 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 	if (of_property_read_u32_array(np, "ssp-light-cam-br",
 	                              data->camera_br_hysteresis, sizeof(data->camera_br_hysteresis)/sizeof(data->camera_br_hysteresis[0]))) {
     	pr_err("no ssp-light-cam-low");
-    	        if(data->camera_lux_hysteresis[0] >= 0) {
-                        data->camera_br_hysteresis[0] = -1;
-                        data->camera_br_hysteresis[1] = 0;
-    	        } else {
-    	                data->camera_br_hysteresis[0] = 10000;
-    	                data->camera_br_hysteresis[1] = 0;
-    	        }
+		if(data->camera_lux_hysteresis[0] >= 0) {
+			data->camera_br_hysteresis[0] = -1;
+			data->camera_br_hysteresis[1] = 0;
+		} else {
+			data->camera_br_hysteresis[0] = 10000;
+			data->camera_br_hysteresis[1] = 0;
+		}
 	}
 
+	if (of_property_read_u32(np, "ssp-brightness-array-len", &data->brightness_array_len)) {
+		pr_err("no brightness array len");
+		data->brightness_array_len = 5;
+	}
+
+	data->brightness_array = kzalloc(data->brightness_array_len * sizeof(u32), GFP_KERNEL);
+	if (of_property_read_u32_array(np, "ssp-brightness-array",
+			data->brightness_array, data->brightness_array_len)) {
+		pr_err("no brightness array");
+		data->brightness_array[0] = 15;
+		data->brightness_array[1] = 40;
+		data->brightness_array[2] = 50;
+		data->brightness_array[3] = 77;
+		data->brightness_array[4] = 255;
+	}
 #endif
 
 #ifdef CONFIG_SENSORS_SSP_MAGNETIC
@@ -463,18 +478,18 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 	{
 		int check_mst_gpio, check_nfc_gpio;
 		int value_mst = 0, value_nfc = 0;
-		
+
 		check_nfc_gpio = of_get_named_gpio_flags(np, "mag-check-nfc", 0, NULL);
 		if(check_nfc_gpio >= 0) {
 			value_nfc = gpio_get_value(check_nfc_gpio);
 		}
-		
+
 		check_mst_gpio = of_get_named_gpio_flags(np, "mag-check-mst", 0, NULL);
 		if(check_mst_gpio >= 0) {
 			value_mst = gpio_get_value(check_mst_gpio);
 		}
 
-		if(value_mst == 1) 
+		if(value_mst == 1)
 		{
 			ssp_info("mag matrix(%d %d) nfc/mst array", value_nfc, value_mst);
 			if (of_property_read_u8_array(np, "ssp-mag-mst-array",
@@ -490,7 +505,7 @@ static int ssp_parse_dt(struct device *dev, struct ssp_data *data)
 				pr_err("no mag-nfc-array");
 			}
 		}
-	}	
+	}
 #endif
 	return 0;
 }

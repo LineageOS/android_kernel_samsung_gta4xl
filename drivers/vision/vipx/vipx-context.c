@@ -54,11 +54,9 @@ static struct vipx_buffer *__vipx_context_create_buffer(
 	if (unlikely(ret))
 		goto p_err_map;
 
-	if (buf->mem_attr == VIPX_COMMON_CACHEABLE) {
-		ret = mem->mops->sync_for_device(mem, buf);
-		if (ret)
-			goto p_err_sync;
-	}
+	ret = mem->mops->sync_for_device(mem, buf);
+	if (ret)
+		goto p_err_sync;
 
 	common_mem->iova = (unsigned int)buf->dvaddr + buf->offset;
 
@@ -83,9 +81,8 @@ static void __vipx_context_destroy_buffer(struct vipx_context *vctx,
 		return;
 
 	mem = &vctx->core->system->memory;
-	if (buf->mem_attr == VIPX_COMMON_CACHEABLE)
-		mem->mops->sync_for_cpu(mem, buf);
 
+	mem->mops->sync_for_cpu(mem, buf);
 	mem->mops->unmap_dmabuf(mem, buf);
 	kfree(buf);
 	vipx_leave();

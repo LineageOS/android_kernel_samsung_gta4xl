@@ -1161,6 +1161,11 @@ int sm5713_usbpd_evaluate_capability(struct sm5713_usbpd_data *pd_data)
 	}
 
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
+	if ((pdic_sink_status->available_pdo_num > 0) &&
+			(pdic_sink_status->available_pdo_num != available_pdo_num)) {
+		policy->send_sink_cap = 1;
+		pdic_sink_status->selected_pdo_num = 1;
+	}
 	pdic_sink_status->available_pdo_num = available_pdo_num;
 	manager->origin_available_pdo_num = available_pdo_num;
 	return available_pdo_num;

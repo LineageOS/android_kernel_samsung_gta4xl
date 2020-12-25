@@ -89,6 +89,17 @@ enum COLOR_LENS {
 	COLOR_LENS_MAX
 };
 
+enum HDR {
+	HDR_OFF,
+	HDR_ON,
+	HDR_ONE = HDR_ON,
+	HDR_TWO,
+	HDR_THREE,
+	HDR_FOUR,
+	HDR_FIVE,
+	HDR_MAX
+};
+
 struct mdnie_seq_info {
 	mdnie_t *cmd;
 	unsigned int len;
@@ -137,6 +148,7 @@ struct mdnie_tune {
 	struct mdnie_table	*dmb_table;
 	struct mdnie_table	*night_table;
 	struct mdnie_table	*lens_table;
+	struct mdnie_table	*hdr_table;
 
 	struct mdnie_scr_info	*scr_info;
 	struct mdnie_trans_info	*trans_info;
@@ -183,6 +195,7 @@ struct mdnie_info {
 	enum NIGHT_MODE	night_mode;
 	enum LIGHT_NOTIFICATION		light_notification;
 	enum COLOR_LENS	color_lens;
+	enum HDR			hdr;
 
 	unsigned int		tuning;
 	unsigned int		accessibility;

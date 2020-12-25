@@ -101,6 +101,9 @@ typedef enum {
 #define DP_PIN_ASSIGNMENT_E	0x00000010	/* ( 1 << 4 ) */
 #define DP_PIN_ASSIGNMENT_F	0x00000020	/* ( 1 << 5 ) */
 
+#define MAX_INPUT_DATA (255)
+#define USBPD_MAX_COUNT_MSG_OBJECT	(8) /* 0..7 */
+
 typedef union {
 	u16 word;
 	u8  byte[2];
@@ -197,6 +200,7 @@ enum usbpd_port_data_role {
 enum usbpd_port_power_role {
 	USBPD_SINK,
 	USBPD_SOURCE,
+	USBPD_DRP,
 };
 
 enum usbpd_port_vconn_role {

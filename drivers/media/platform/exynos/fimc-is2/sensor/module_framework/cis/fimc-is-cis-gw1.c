@@ -59,6 +59,7 @@ static const u32 **sensor_gw1_setfiles;
 static const u32 *sensor_gw1_setfile_sizes;
 static u32 sensor_gw1_max_setfile_num;
 static const struct sensor_pll_info_compact **sensor_gw1_pllinfos;
+static bool sensor_gw1_cal_write_flag;
 
 #ifdef CONFIG_VENDER_MCD_V2
 extern struct fimc_is_lib_support gPtr_lib_support;
@@ -82,6 +83,26 @@ static void sensor_gw1_set_integration_min(u32 mode, cis_shared_data *cis_data)
 		cis_data->min_coarse_integration_time);
 }
 
+#ifdef USE_AP_PDAF
+static void sensor_gw1_cis_set_paf_stat_enable(u32 mode, cis_shared_data *cis_data)
+{
+	WARN_ON(!cis_data);
+
+	switch (mode) {
+	case SENSOR_GW1_2X2BIN_4624X3468_30FPS:
+	case SENSOR_GW1_2X2BIN_4624X2604_30FPS:
+	case SENSOR_GW1_2X2BIN_4000X3000_30FPS:
+	case SENSOR_GW1_2X2BIN_3296x1856_60FPS:
+		cis_data->is_data.paf_stat_enable = true;
+		break;
+	default:
+		cis_data->is_data.paf_stat_enable = false;
+		break;
+	}
+}
+#endif
+
+#if SENSOR_GW1_DEBUG_INFO
 static int sensor_gw1_cis_fine_integration_value(struct fimc_is_cis *cis)
 {
 	int ret = 0;
@@ -129,58 +150,75 @@ i2c_err:
 p_err:
 	return ret;
 }
+#endif
 
 static void sensor_gw1_cis_data_calculation(const struct sensor_pll_info_compact *pll_info, cis_shared_data *cis_data)
 {
-	u32 vt_pix_clk_hz = 0;
+	u32 total_pixels = 0;
+	u32 pixel_rate = 0;
 	u32 frame_rate = 0, max_fps = 0, frame_valid_us = 0;
 
 	FIMC_BUG_VOID(!pll_info);
 
 	/* 1. get pclk value from pll info */
-	vt_pix_clk_hz = pll_info->pclk;
+	pixel_rate = pll_info->pclk * TOTAL_NUM_OF_IVTPX_CHANNEL;
+	total_pixels = pll_info->frame_length_lines * pll_info->line_length_pck;
 
-	/* 2. FPS calcurate */
-	frame_rate = vt_pix_clk_hz  / (pll_info->frame_length_lines * pll_info->line_length_pck);
+	/* 2. FPS calculation */
+	frame_rate = pixel_rate / (pll_info->frame_length_lines * pll_info->line_length_pck);
 
-	/* 3. the time of processing one frame calcuration (us) */
-	cis_data->min_frame_us_time = (((u32)(pll_info->frame_length_lines) * pll_info->line_length_pck * 1000)
-								/ (vt_pix_clk_hz /1000));
+	/* 3. the time of processing one frame calculation (us) */
+	cis_data->min_frame_us_time = (1 * 1000 * 1000) / frame_rate;
 	cis_data->cur_frame_us_time = cis_data->min_frame_us_time;
+#ifdef REAR_SUB_CAMERA
+	cis_data->min_sync_frame_us_time = cis_data->min_frame_us_time;
+#endif
 
-	dbg_sensor(1, "frame_duration(%d) - frame_rate (%d) = vt_pix_clk_hz(%d) / "
+	dbg_sensor(1, "frame_duration(%d) - frame_rate (%d) = pixel_rate(%u) / "
 		KERN_CONT "(pll_info->frame_length_lines(%d) * pll_info->line_length_pck(%d))\n",
-		cis_data->min_frame_us_time, frame_rate, vt_pix_clk_hz, pll_info->frame_length_lines, pll_info->line_length_pck);
+		cis_data->min_frame_us_time, frame_rate, pixel_rate, pll_info->frame_length_lines, pll_info->line_length_pck);
+
 
 	/* calcurate max fps */
-	max_fps = (vt_pix_clk_hz * 10) / (pll_info->frame_length_lines * pll_info->line_length_pck);
+	max_fps = (pixel_rate * 10) / (pll_info->frame_length_lines * pll_info->line_length_pck);
 	max_fps = (max_fps % 10 >= 5 ? frame_rate + 1 : frame_rate);
 
-	cis_data->pclk = vt_pix_clk_hz;
+	cis_data->pclk = pixel_rate;
 	cis_data->max_fps = max_fps;
 	cis_data->frame_length_lines = pll_info->frame_length_lines;
 	cis_data->line_length_pck = pll_info->line_length_pck;
 	cis_data->line_readOut_time = sensor_cis_do_div64((u64)cis_data->line_length_pck * (u64)(1000 * 1000 * 1000), cis_data->pclk);
 	cis_data->rolling_shutter_skew = (cis_data->cur_height - 1) * cis_data->line_readOut_time;
+	cis_data->max_coarse_integration_time =
+		SENSOR_GW1_MAX_COARSE_INTEGRATION_TIME - SENSOR_GW1_COARSE_INTEGRATION_TIME_MAX_MARGIN;
+
 	cis_data->stream_on = false;
 
-	/* Frame valid time calcuration */
+	/* Frame valid time calculation */
 	frame_valid_us = sensor_cis_do_div64((u64)cis_data->cur_height * (u64)cis_data->line_length_pck * (u64)(1000 * 1000), cis_data->pclk);
 	cis_data->frame_valid_us_time = (int)frame_valid_us;
 
 	dbg_sensor(1, "%s\n", __func__);
 	dbg_sensor(1, "Sensor size(%d x %d) setting: SUCCESS!\n", cis_data->cur_width, cis_data->cur_height);
-	dbg_sensor(1, "Frame Valid(us): %d\n", frame_valid_us);
+	dbg_sensor(1, "Frame Valid(%d us)\n", frame_valid_us);
 	dbg_sensor(1, "rolling_shutter_skew: %lld\n", cis_data->rolling_shutter_skew);
 
 	dbg_sensor(1, "Fps: %d, max fps(%d)\n", frame_rate, cis_data->max_fps);
 	dbg_sensor(1, "min_frame_time(%d us)\n", cis_data->min_frame_us_time);
-	dbg_sensor(1, "Pixel rate(Kbps): %d\n", cis_data->pclk / 1000);
+	dbg_sensor(1, "Pixel rate(%d KHz)\n", cis_data->pclk / 1000);
+	dbg_sensor(1, "Line readout Time: %d\n", cis_data->line_readOut_time);
 
 	/* Constant values */
 	cis_data->min_fine_integration_time = SENSOR_GW1_FINE_INTEGRATION_TIME_MIN;
 	cis_data->max_margin_fine_integration_time = SENSOR_GW1_FINE_INTEGRATION_TIME_MAX_MARGIN;
 	cis_data->max_fine_integration_time = cis_data->line_length_pck;
+
+	/* Frame period calculation */
+	cis_data->frame_time = (cis_data->line_readOut_time * cis_data->cur_height / 1000);
+	cis_data->rolling_shutter_skew = (cis_data->cur_height - 1) * cis_data->line_readOut_time;
+	dbg_sensor(1, "[%s] frame_time(%d), rolling_shutter_skew(%lld) resolution(%d x %d)\n", __func__,
+		cis_data->frame_time, cis_data->rolling_shutter_skew, cis_data->cur_width, cis_data->cur_height);
+
 	info("%s: done", __func__);
 }
 
@@ -310,6 +348,159 @@ int sensor_gw1_cis_check_rev_on_init(struct v4l2_subdev *subdev)
 	return 0;
 }
 
+#if SENSOR_GW1_CAL_DEBUG
+int sensor_gw1_cis_cal_dump(char* name, char *buf, size_t size)
+{
+	int ret = 0;
+
+	struct file *fp;
+	ssize_t tx = -ENOENT;
+	int fd, old_mask;
+	loff_t pos = 0;
+	mm_segment_t old_fs;
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+
+	old_mask = sys_umask(0);
+
+	sys_rmdir(name);
+	fd = sys_open(name, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, 0666);
+	if (fd < 0) {
+		err("open file error(%d): %s", fd, name);
+		sys_umask(old_mask);
+		set_fs(old_fs);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	fp = fget(fd);
+	if (fp) {
+		tx = vfs_write(fp, buf, size, &pos);
+		if (tx != size) {
+			err("fail to write %s. ret %zd", name, tx);
+			ret = -ENOENT;
+		}
+
+		vfs_fsync(fp, 0);
+		fput(fp);
+	} else {
+		err("fail to get file *: %s", name);
+	}
+
+	sys_close(fd);
+	sys_umask(old_mask);
+	set_fs(old_fs);
+
+p_err:
+	return ret;
+}
+#endif
+
+int sensor_gw1_cis_XTCCal_write(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_cis *cis;
+	struct i2c_client *client = NULL;
+	struct fimc_is_device_sensor_peri *sensor_peri = NULL;
+
+	int position;
+	ulong cal_addr;
+	u8 cal_data[SENSOR_GW1_XTC_CAL_SIZE] = {0, };
+
+#ifdef CONFIG_VENDER_MCD_V2
+	char *rom_cal_buf = NULL;
+#else
+	struct fimc_is_lib_support *lib = &gPtr_lib_support;
+#endif
+
+	FIMC_BUG(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	FIMC_BUG(!cis);
+	FIMC_BUG(!cis->cis_data);
+
+	sensor_peri = container_of(cis, struct fimc_is_device_sensor_peri, cis);
+	FIMC_BUG(!sensor_peri);
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		return -EINVAL;
+	}
+
+	position = sensor_peri->module->position;
+
+#ifdef CONFIG_VENDER_MCD_V2
+	ret = fimc_is_sec_get_cal_buf(position, &rom_cal_buf);
+
+	if (ret < 0) {
+		goto p_err;
+	}
+
+	cal_addr = (ulong)rom_cal_buf;
+	if (position == SENSOR_POSITION_REAR) {
+		cal_addr += SENSOR_GW1_XTC_CAL_BASE_REAR;
+	} else {
+		err("cis_gw1 position(%d) is invalid!\n", position);
+		goto p_err;
+	}
+#else
+	if (position == SENSOR_POSITION_REAR){
+		cal_addr = lib->minfo->kvaddr_cal[position] + SENSOR_GW1_XTC_CAL_BASE_REAR;
+	}else {
+		err("cis_gw1 position(%d) is invalid!\n", position);
+		goto p_err;
+	}
+#endif
+
+	memcpy(cal_data, (u16 *)cal_addr, SENSOR_GW1_XTC_CAL_SIZE);
+
+#if SENSOR_GW1_CAL_DEBUG
+	ret = sensor_gw1_cis_cal_dump(SENSOR_GW1_XTC_DUMP_NAME, (char *)cal_data, (size_t)SENSOR_GW1_XTC_CAL_SIZE);
+	if (ret < 0) {
+		err("cis_gw1 XTC Cal dump fail(%d)!\n", ret);
+	}
+#endif
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+
+	/* page select */
+	ret = fimc_is_sensor_write16(client, SENSOR_GW1_INDIRECT_WRITE_PAGE_ADDR, SENSOR_GW1_XTC_PAGE_ADDR);
+	if (ret < 0) {
+		goto i2c_err;
+	}
+	/* write register address ( in auto increment reg) */
+	ret = fimc_is_sensor_write16(client, SENSOR_GW1_INDIRECT_WRITE_OFFSET_ADDR, SENSOR_GW1_XTC_REG_ADDR);
+	if (ret < 0) {
+		goto i2c_err;
+	}
+	/* write data in write register */
+	ret = fimc_is_sensor_write8_sequential(client, SENSOR_GW1_INDIRECT_WRITE_DATA_ADDR, cal_data, SENSOR_GW1_XTC_CAL_SIZE);
+	if (ret < 0) {
+		goto i2c_err;
+	}
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	/* load XTC additional settings */
+	ret = sensor_cis_set_registers(subdev, sensor_gw1_xtc_additional_setting, ARRAY_SIZE(sensor_gw1_xtc_additional_setting));
+	if (ret < 0) {
+		err("sensor_gw1_set_registers fail!!");
+		goto p_err;
+	}
+	pr_info("XTC loaded\n");
+	return ret;
+
+i2c_err:
+	if (ret < 0) {
+		err("cis_gw1 XTC write Error(%d)\n", ret);
+	}
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+p_err:
+	return ret;
+}
+
 /* CIS OPS */
 int sensor_gw1_cis_init(struct v4l2_subdev *subdev)
 {
@@ -356,6 +547,13 @@ int sensor_gw1_cis_init(struct v4l2_subdev *subdev)
 		goto p_err;
 	}
 
+	/***********************************************************************
+	***** Check that XTC Cal is written for Remosaic Capture.
+	***** false : Not yet write the XTC
+	***** true  : Written the XTC Or Skip
+	***********************************************************************/
+	sensor_gw1_cal_write_flag = false;
+
 	if (cis->cis_data->cis_rev <= 0xA1) {
 		probe_info("%s setfile_A\n", __func__);
 		sensor_gw1_global = sensor_gw1_setfile_A_global;
@@ -379,6 +577,8 @@ int sensor_gw1_cis_init(struct v4l2_subdev *subdev)
 	cis->cis_data->cur_height = SENSOR_GW1_MAX_HEIGHT;
 	cis->cis_data->low_expo_start = 33000;
 	cis->need_mode_change = false;
+	cis->long_term_mode.sen_strm_off_on_step = 0;
+	cis->long_term_mode.sen_strm_off_on_enable = false;
 
 	sensor_gw1_cis_data_calculation(sensor_gw1_pllinfos[setfile_index], cis->cis_data);
 	sensor_gw1_set_integration_max_margin(setfile_index, cis->cis_data);
@@ -406,11 +606,68 @@ int sensor_gw1_cis_init(struct v4l2_subdev *subdev)
 	setinfo.return_value = 0;
 #endif
 
-
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
 	dbg_sensor(1, "[%s] time %lu us\n", __func__, (end.tv_sec - st.tv_sec)*1000000 + (end.tv_usec - st.tv_usec));
 #endif
+
+p_err:
+	return ret;
+}
+int sensor_gw1_cis_dump_registers(struct v4l2_subdev *subdev, const u32 *regs, const u32 size)
+{
+	int ret = 0;
+	int i = 0;
+	struct fimc_is_cis *cis;
+	struct i2c_client *client;
+	u8 data8 = 0;
+	u16 data16 = 0;
+
+	FIMC_BUG(!subdev);
+	FIMC_BUG(!regs);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	if (!cis) {
+		err("cis is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+
+	for (i = 0; i < size; i += I2C_NEXT) {
+		if (regs[i + I2C_BYTE] == 0x2 && regs[i + I2C_ADDR] == 0x6028) {
+			pr_err("[SEN:DUMP WRITE] [0x%04X, 0x%04X\n", regs[i + I2C_ADDR], regs[i + I2C_DATA]);
+			ret = fimc_is_sensor_write16(client, SENSOR_GW1_INDIRECT_READ_PAGE_ADDR,  regs[i + I2C_DATA]);
+		}
+		if (regs[i + I2C_BYTE] == 0x2 && regs[i + I2C_ADDR] == 0x602A) {
+			pr_err("[SEN:DUMP WRITE] [0x%04X, 0x%04X\n", regs[i + I2C_ADDR], regs[i + I2C_DATA]);
+			 ret = fimc_is_sensor_write16(client, SENSOR_GW1_INDIRECT_READ_OFFSET_ADDR, regs[i + I2C_DATA]);
+		}
+
+		if (regs[i + I2C_BYTE] == 0x1) {
+			ret = fimc_is_sensor_read8(client, regs[i + I2C_ADDR], &data8);
+			if (ret < 0) {
+				err("fimc_is_sensor_read8 fail, ret(%d), addr(%#x)",
+						ret, regs[i + I2C_ADDR]);
+			}
+			pr_err("[SEN:DUMP]111111 [0x%04X, 0x%04X\n", regs[i + I2C_ADDR], data8);
+		} else {
+
+			ret = fimc_is_sensor_read16(client, regs[i + I2C_ADDR], &data16);
+			if (ret < 0) {
+				err("fimc_is_sensor_read6 fail, ret(%d), addr(%#x)",
+						ret, regs[i + I2C_ADDR]);
+			}
+			pr_err("[SEN:DUMP] 222222[0x%04X, 0x%04X\n", regs[i + I2C_ADDR], data16);
+		}
+	}
 
 p_err:
 	return ret;
@@ -450,35 +707,36 @@ int sensor_gw1_cis_log_status(struct v4l2_subdev *subdev)
 
 	pr_info("[%s] *******************************\n", __func__);
 	ret = fimc_is_sensor_read16(client, SENSOR_GW1_MODEL_ID_ADDR, &data16);
-	if (unlikely(!ret)) pr_info("model_id(0x%x)\n", data16);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]model_id(0x%x)\n", data16);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read8(client, SENSOR_GW1_REVISION_NUM_ADDR, &data8);
-	if (unlikely(!ret)) pr_info("revision_number(0x%x)\n", data8);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]revision_number(0x%x)\n", data8);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read8(client, SENSOR_GW1_FRAME_COUNT_ADDR, &data8);
-	if (unlikely(!ret)) pr_info("frame_count(0x%x)\n", data8);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]frame_count(0x%x)\n", data8);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read8(client, SENSOR_GW1_SETUP_MODE_SELECT_ADDR, &data8);
-	if (unlikely(!ret)) pr_info("setup_mode(streaming)(0x%x)\n", data8);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]setup_mode(streaming)(0x%x)\n", data8);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read16(client, SENSOR_GW1_EXTCLK_FREQ_ADDR, &data16);
-	if (unlikely(!ret)) pr_info("extclk_feq_mhz(0x%x)\n", data16);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]extclk_feq_mhz(0x%x)\n", data16);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read16(client, SENSOR_GW1_CORASE_INTEG_TIME_ADDR, &data16);
-	if (unlikely(!ret)) pr_info("coarse_integration_time(0x%x)\n", data16);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]coarse_integration_time(0x%x)\n", data16);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read16(client, SENSOR_GW1_AGAIN_CODE_GLOBAL_ADDR, &data16);
-	if (unlikely(!ret)) pr_info("gain_code_global(0x%x)\n", data16);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]gain_code_global(0x%x)\n", data16);
 	else goto i2c_err;
 	ret = fimc_is_sensor_read16(client, SENSOR_GW1_FRAME_LENGTH_LINE_ADDR, &data16);
-	if (unlikely(!ret)) pr_info("frame_length_line(0x%x)\n", data16);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]frame_length_line(0x%x)\n", data16);
 	else goto i2c_err;
-	ret = fimc_is_sensor_read8(client, SENSOR_GW1_LINE_LENGTH_PCK_ADDR, &data8);
-	if (unlikely(!ret)) pr_info("line_length_pck(0x%x)\n", data8);
+	ret = fimc_is_sensor_read16(client, SENSOR_GW1_LINE_LENGTH_PCK_ADDR, &data16);
+	if (unlikely(!ret)) pr_info("[SEN:INFO]line_length_pck(0x%x)\n", data8);
 	else goto i2c_err;
 
-	sensor_cis_dump_registers(subdev, sensor_gw1_setfiles[0], sensor_gw1_setfile_sizes[0]);
-	pr_info("[%s] *******************************\n", __func__);
+	pr_info("[%s] *************Mode settings dump start******************\n", __func__);
+	 sensor_gw1_cis_dump_registers(subdev, sensor_gw1_setfiles[0], sensor_gw1_setfile_sizes[0]);
+	pr_info("[%s] *************Mode settings dump end******************\n", __func__);
 
 i2c_err:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
@@ -583,6 +841,11 @@ int sensor_gw1_cis_set_global_setting(struct v4l2_subdev *subdev)
 p_err:
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
+	// Check that XTC Cal is written for Remosaic Capture.
+	// false : XTC not yet written
+	// true  : XTC written
+	sensor_gw1_cal_write_flag = false;
+
 	return ret;
 }
 
@@ -616,11 +879,27 @@ int sensor_gw1_cis_mode_change(struct v4l2_subdev *subdev, u32 mode)
 		cis->rev_flag = false;
 		ret = sensor_gw1_cis_check_rev(cis);
 		if (ret < 0) {
-			err("sensor_imx582_check_rev is fail");
+			err("sensor_gw1_check_rev is fail");
 			goto p_err;
 		}
 	}
 
+#if SENSOR_GW1_WRITE_XTC_CAL
+	if (IS_REMOSAIC(mode) && sensor_gw1_cal_write_flag == false) {
+		sensor_gw1_cal_write_flag = true;
+
+		info("[%s] mode is XTC Remosaic Mode! Write XTC data.\n", __func__);
+
+		ret = sensor_gw1_cis_XTCCal_write(subdev);
+		if (ret < 0) {
+			err("sensor_gw1_XTC_Cal_write fail!! (%d)", ret);
+			goto p_err;
+		}
+	}
+#endif
+#ifdef USE_AP_PDAF
+	sensor_gw1_cis_set_paf_stat_enable(mode, cis->cis_data);
+#endif
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 
 	info("[%s] mode setting start\n", __func__);
@@ -868,9 +1147,9 @@ int sensor_gw1_cis_stream_on(struct v4l2_subdev *subdev)
 	info("[%s] start\n", __func__);
 
 	/* Sensor stream on */
-	ret = fimc_is_sensor_write8(client, SENSOR_GW1_SETUP_MODE_SELECT_ADDR, 0x01);
+	ret = fimc_is_sensor_write16(client, SENSOR_GW1_SETUP_MODE_SELECT_ADDR, 0x0100);
 	if (ret < 0)
-		err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0100, 0x01, ret);
+		err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0100, 0x0100, ret);
 
 	I2C_MUTEX_UNLOCK(cis->i2c_lock);
 
@@ -944,7 +1223,7 @@ int sensor_gw1_cis_stream_off(struct v4l2_subdev *subdev)
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 
 	/* Sensor stream off */
-	ret = fimc_is_sensor_write8(client, SENSOR_GW1_SETUP_MODE_SELECT_ADDR, 0x00);
+	ret = fimc_is_sensor_write16(client, SENSOR_GW1_SETUP_MODE_SELECT_ADDR, 0x0000);
 	if (ret < 0)
 		err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0100, 0x0000, ret);
 
@@ -996,17 +1275,38 @@ int sensor_gw1_cis_adjust_frame_duration(struct v4l2_subdev *subdev,
 	line_length_pck = cis_data->line_length_pck;
 	coarse_integ_time = (u32)(((vt_pic_clk_freq_khz * input_exposure_time) / 1000
 									- cis_data->min_fine_integration_time) / line_length_pck);
+	
+	if (cis->min_fps == cis->max_fps) {
+		dbg_sensor(1, "[%s] requested min_fps(%d), max_fps(%d) from HAL\n", __func__, cis->min_fps, cis->max_fps);
+
+		if (coarse_integ_time > cis_data->max_coarse_integration_time) {
+			dbg_sensor(1, "[MOD:D:%d] %s, vsync_cnt(%d), coarse(%u) max(%u)\n", cis->id, __func__,
+				cis_data->sen_vsync_count, coarse_integ_time, cis_data->max_coarse_integration_time);
+			coarse_integ_time = cis_data->max_coarse_integration_time;
+		}
+
+		if (coarse_integ_time < cis_data->min_coarse_integration_time) {
+			dbg_sensor(1, "[MOD:D:%d] %s, vsync_cnt(%d), coarse(%u) min(%u)\n", cis->id, __func__,
+				cis_data->sen_vsync_count, coarse_integ_time, cis_data->min_coarse_integration_time);
+			coarse_integ_time = cis_data->min_coarse_integration_time;
+		}
+	}
+	
 	frame_length_lines = coarse_integ_time + cis_data->max_margin_coarse_integration_time;
 	frame_duration = (u32)(((u64)frame_length_lines * line_length_pck) * 1000 / vt_pic_clk_freq_khz);
 	max_frame_us_time = 1000000/cis->min_fps;
 
-	dbg_sensor(1, "[%s](vsync cnt = %d) input exp(%d), adj duration, frame duraion(%d), min_frame_us(%d)\n",
-			__func__, cis_data->sen_vsync_count, input_exposure_time, frame_duration, cis_data->min_frame_us_time);
-	dbg_sensor(1, "[%s](vsync cnt = %d) adj duration, frame duraion(%d), min_frame_us(%d), max_frame_us_time(%d)\n",
-			__func__, cis_data->sen_vsync_count, frame_duration, cis_data->min_frame_us_time, max_frame_us_time);
+	dbg_sensor(1, "[%s](vsync cnt = %d) input exp(%d), calculated frame duraion(%d), min_frame_us(%d), max_frame_us_time(%d)\n",
+			__func__, cis_data->sen_vsync_count, input_exposure_time, frame_duration, cis_data->min_frame_us_time, max_frame_us_time);
 
 	*target_duration = MAX(frame_duration, cis_data->min_frame_us_time);
-	if(cis->min_fps == cis->max_fps) {
+
+	/*
+	 * For recording with fixed fps (>= 10fps).
+	 * If input exposure is set as 33333us@30fps from ddk,
+	 * then calculated frame duration is larger than 33333us because of CIT MARGIN.
+	 */
+	if ((cis_data->min_frame_us_time <= 100000) && (cis->min_fps == cis->max_fps)) {
 		*target_duration = MIN(frame_duration, max_frame_us_time);
 	}
 
@@ -1026,6 +1326,7 @@ int sensor_gw1_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 	struct fimc_is_cis *cis;
 	struct i2c_client *client;
 	cis_shared_data *cis_data;
+	struct fimc_is_long_term_expo_mode *lte_mode;
 
 	u64 vt_pic_clk_freq_khz = 0;
 	u32 line_length_pck = 0;
@@ -1051,10 +1352,23 @@ int sensor_gw1_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 	}
 
 	cis_data = cis->cis_data;
+	lte_mode = &cis->long_term_mode;
 
 	if (frame_duration < cis_data->min_frame_us_time) {
 		dbg_sensor(1, "frame duration is less than min(%d)\n", frame_duration);
 		frame_duration = cis_data->min_frame_us_time;
+	}
+
+	/*
+	 * For Long Exposure Mode without stream on_off. (ex. Night HyperLapse)
+	 * If frame duration over than 1sec, then it has to be applied CIT shift.
+	 * In this case, frame_duration is set in set_exposure_time with CIT shift.
+	 */
+	if (lte_mode->sen_strm_off_on_enable == false && cis_data ->min_frame_us_time > 1000000) {
+		cis_data->cur_frame_us_time = frame_duration;
+		dbg_sensor(1, "[MOD:D:%d][%s] Skip set frame duration(%d) for CIT SHIFT.\n",
+			cis->id, __func__, frame_duration);
+		return ret;
 	}
 
 	vt_pic_clk_freq_khz = cis_data->pclk / 1000;
@@ -1074,14 +1388,26 @@ int sensor_gw1_cis_set_frame_duration(struct v4l2_subdev *subdev, u32 frame_dura
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 
+	if (lte_mode->sen_strm_off_on_enable == false && cis_data->frame_length_lines_shifter > 0) {
+		cis_data->frame_length_lines_shifter = 0;
+		ret = fimc_is_sensor_write8(client, SENSOR_GW1_CIT_LSHIFT_ADDR, 0);
+		ret += fimc_is_sensor_write8(client, SENSOR_GW1_FRM_LENGTH_LINE_LSHIFT_ADDR, 0);
+		if (ret < 0)
+			goto i2c_err;
+	}
+
 	ret = fimc_is_sensor_write16(client, SENSOR_GW1_FRAME_LENGTH_LINE_ADDR, frame_length_lines);
 	if (ret < 0)
 		goto i2c_err;
 
 	cis_data->cur_frame_us_time = frame_duration;
 	cis_data->frame_length_lines = frame_length_lines;
-	cis_data->max_coarse_integration_time =
-		cis_data->frame_length_lines - cis_data->max_margin_coarse_integration_time;
+	if (lte_mode->sen_strm_off_on_enable == true) {
+		cis_data->max_coarse_integration_time =
+			SENSOR_GW1_MAX_COARSE_INTEGRATION_TIME - cis_data->max_margin_coarse_integration_time;
+	} else {
+		cis_data->max_coarse_integration_time = cis_data->frame_length_lines - cis_data->max_margin_coarse_integration_time;
+	}
 
 #ifdef DEBUG_SENSOR_TIME
 	do_gettimeofday(&end);
@@ -1164,11 +1490,18 @@ int sensor_gw1_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 	struct fimc_is_cis *cis;
 	struct i2c_client *client;
 	cis_shared_data *cis_data;
+	struct fimc_is_long_term_expo_mode *lte_mode;
 
 	u64 vt_pic_clk_freq_khz = 0;
 	u16 short_coarse_int = 0;
 	u32 line_length_pck = 0;
 	u32 min_fine_int = 0;
+	u32 target_exp = 0;
+	u32 target_frame_duration = 0;
+	u16 frame_length_lines = 0;
+
+	unsigned char cit_lshift_val = 0;
+	int cit_lshift_count = 0;
 
 #ifdef DEBUG_SENSOR_TIME
 	struct timeval st, end;
@@ -1198,10 +1531,12 @@ int sensor_gw1_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 	}
 
 	cis_data = cis->cis_data;
+	lte_mode = &cis->long_term_mode;
 
 	dbg_sensor(1, "[MOD:D:%d] %s, vsync_cnt(%d), target long(%d), short(%d)\n", cis->id, __func__,
 			cis_data->sen_vsync_count, target_exposure->long_val, target_exposure->short_val);
 
+	target_exp = target_exposure->val;
 	vt_pic_clk_freq_khz = cis_data->pclk / 1000;
 	line_length_pck = cis_data->line_length_pck;
 	min_fine_int = cis_data->min_fine_integration_time;
@@ -1209,7 +1544,44 @@ int sensor_gw1_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 	dbg_sensor(1, "[MOD:D:%d] %s, vt_pic_clk_freq_khz (%d), line_length_pck(%d), min_fine_int (%d)\n",
 		cis->id, __func__, vt_pic_clk_freq_khz, line_length_pck, min_fine_int);
 
-	short_coarse_int = ((target_exposure->short_val * vt_pic_clk_freq_khz) / 1000 - min_fine_int) / line_length_pck;
+	/*
+	 * For Long Exposure Mode without stream on_off. (ex. Night Hyper Laps: min exp. is 1.5sec)
+	 * If frame duration over than 1sec, then sequence is same as below
+	 * 1. set CIT_LSHFIT
+	 * 2. set COARSE_INTEGRATION_TIME
+	 * 3. set FRM_LENGTH_LINES
+	 * 4. set FRM_LENGTH_LINE_LSHIFT
+	 */
+	if (lte_mode->sen_strm_off_on_enable == false && cis_data ->min_frame_us_time > 1000000) {
+		target_frame_duration = cis_data->cur_frame_us_time;
+		dbg_sensor(1, "[MOD:D:%d] %s, input frame duration(%d) for CIT SHIFT \n",
+			cis->id, __func__, target_frame_duration);
+
+		if (target_frame_duration > 100000) {
+			cit_lshift_val = (unsigned char)(target_frame_duration / 100000);
+			while(cit_lshift_val > 1) {
+				cit_lshift_val /= 2;
+				target_frame_duration /= 2;
+				target_exp /= 2;
+				cit_lshift_count++;
+			}
+
+			if (cit_lshift_count > SENSOR_GW1_MAX_CIT_LSHIFT_VALUE)
+				cit_lshift_count = SENSOR_GW1_MAX_CIT_LSHIFT_VALUE;
+		}
+
+		frame_length_lines = (u16)((vt_pic_clk_freq_khz * target_frame_duration) / (line_length_pck * 1000));
+
+		cis_data->frame_length_lines = frame_length_lines;
+		cis_data->frame_length_lines_shifter = cit_lshift_count;
+		cis_data->max_coarse_integration_time =
+			frame_length_lines - cis_data->max_margin_coarse_integration_time;
+
+		dbg_sensor(1, "[MOD:D:%d] %s, target_frame_duration(%d), frame_length_line(%d), cit_lshift_count(%d)\n",
+			cis->id, __func__, target_frame_duration, frame_length_lines, cit_lshift_count);
+	}
+
+	short_coarse_int = (u16)(((target_exp * vt_pic_clk_freq_khz) - min_fine_int) / (line_length_pck * 1000));
 
 	if (short_coarse_int > cis_data->max_coarse_integration_time) {
 		dbg_sensor(1, "[MOD:D:%d] %s, vsync_cnt(%d), short coarse(%d) max(%d)\n", cis->id, __func__,
@@ -1231,10 +1603,25 @@ int sensor_gw1_cis_set_exposure_time(struct v4l2_subdev *subdev, struct ae_param
 
 	I2C_MUTEX_LOCK(cis->i2c_lock);
 
+	if (lte_mode->sen_strm_off_on_enable == false && cis_data ->min_frame_us_time > 1000000) {
+		if (cit_lshift_count > 0) {
+			ret = fimc_is_sensor_write8(client, SENSOR_GW1_CIT_LSHIFT_ADDR, cit_lshift_count);
+			ret += fimc_is_sensor_write8(client, SENSOR_GW1_FRM_LENGTH_LINE_LSHIFT_ADDR, cit_lshift_count);
+			if (ret < 0)
+				goto i2c_err;
+		}
+	}
+
 	/* Short exposure */
 	ret = fimc_is_sensor_write16(client, SENSOR_GW1_CORASE_INTEG_TIME_ADDR, short_coarse_int);
 	if (ret < 0)
 		goto i2c_err;
+
+	if (lte_mode->sen_strm_off_on_enable == false && cis_data ->min_frame_us_time > 1000000) {
+		ret = fimc_is_sensor_write16(client, SENSOR_GW1_FRAME_LENGTH_LINE_ADDR, frame_length_lines);
+		if (ret < 0)
+			goto i2c_err;
+	}
 
 	dbg_sensor(1, "[MOD:D:%d] %s, vsync_cnt(%d), vt_pic_clk_freq_khz (%d),"
 		KERN_CONT "line_length_pck(%d), min_fine_int (%d)\n", cis->id, __func__,
@@ -1867,6 +2254,97 @@ int sensor_gw1_cis_set_adjust_sync(struct v4l2_subdev *subdev, u32 sync)
 	return ret;
 }
 
+int sensor_gw1_cis_long_term_exposure(struct v4l2_subdev *subdev)
+{
+/*
+	relation between shutter UI and lshift value
+	lshift_val = log2(shift)
+	+------------+-----------+-------------+
+	| Shutter UI | CIT_Shift | exp (in us) |
+	+------------+-----------+-------------+
+	| 1/10s      | 1         | 100000      |
+	+------------+-----------+-------------+
+	| 1/8s       | 1         | 125000      |
+	+------------+-----------+-------------+
+	| 1/6s       | 1         | 166666      |
+	+------------+-----------+-------------+
+	| 1/4s       | 1         | 250000      |
+	+------------+-----------+-------------+
+	| 0.3s       | 1         | 300000      |
+	+------------+-----------+-------------+
+	| 0.5s       | 4         | 125000      |
+	+------------+-----------+-------------+
+	| 1s         | 8         | 125000      |
+	+------------+-----------+-------------+
+	| 2s         | 16        | 125000      |
+	+------------+-----------+-------------+
+	| 4s         | 32        | 125000      |
+	+------------+-----------+-------------+
+	| 8s         | 64        | 125000      |
+	+------------+-----------+-------------+
+	| 10s        | 64        | 156250      |
+	+------------+-----------+-------------+ 
+	*/
+	int ret = 0;
+	struct fimc_is_cis *cis;
+	struct fimc_is_long_term_expo_mode *lte_mode;
+	unsigned char cit_lshift_val = 0;
+	int cit_lshift_count = 0;
+	u32 target_exp = 0;
+	int hold = 0;
+
+	FIMC_BUG(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	lte_mode = &cis->long_term_mode;
+
+	hold = sensor_gw1_cis_group_param_hold(subdev, 0x01);
+	if (hold < 0) {
+		ret = hold;
+		goto p_err;
+	}
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+	/* LTE mode or normal mode set */
+	if (lte_mode->sen_strm_off_on_enable == true) {
+		target_exp = lte_mode->expo[0];
+		if (target_exp >= 125000 ) {
+			cit_lshift_val = (unsigned char)(target_exp / 125000);
+			while(cit_lshift_val > 1)
+			{
+				cit_lshift_val /= 2;
+				target_exp /= 2;
+				cit_lshift_count++;
+			}
+
+			lte_mode->expo[0] = target_exp;
+
+			if (cit_lshift_count > SENSOR_GW1_MAX_CIT_LSHIFT_VALUE)
+				cit_lshift_count = SENSOR_GW1_MAX_CIT_LSHIFT_VALUE;
+		}
+	}
+
+	ret = fimc_is_sensor_write8(cis->client, SENSOR_GW1_CIT_LSHIFT_ADDR, cit_lshift_count);
+	ret += fimc_is_sensor_write8(cis->client, SENSOR_GW1_FRM_LENGTH_LINE_LSHIFT_ADDR, cit_lshift_count);
+
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+p_err:
+	if (hold > 0) {
+		hold = sensor_gw1_cis_group_param_hold(subdev, 0x00);
+		if (hold < 0)
+			ret = hold;
+	}
+
+	info("[%s] sen_strm_enable(%d), cit_lshift_count (%d), target_exp(%d)", __func__,
+		lte_mode->sen_strm_off_on_enable, cit_lshift_count, lte_mode->expo[0]);
+
+	if (ret < 0)
+		pr_err("ERR[%s]: LTE register setting fail\n", __func__);
+
+	return ret;
+}
+
 int sensor_gw1_cis_set_wb_gain(struct v4l2_subdev *subdev, struct wb_gains wb_gains)
 {
 #define ABS_WB_GAIN_NUM	3
@@ -1903,7 +2381,7 @@ int sensor_gw1_cis_set_wb_gain(struct v4l2_subdev *subdev, struct wb_gains wb_ga
 
 	mode = cis->cis_data->sens_config_index_cur;
 
-	if (mode == SENSOR_GW1_2X2BIN_4624X3468_30FPS)
+	if (!IS_REMOSAIC_MODE(cis))
 		return 0;
 
 	if (wb_gains.gr != wb_gains.gb) {
@@ -1926,7 +2404,7 @@ int sensor_gw1_cis_set_wb_gain(struct v4l2_subdev *subdev, struct wb_gains wb_ga
 	avg_g = (wb_gains.gr + wb_gains.gb) / 2;
 	abs_gains[0] = (u16)((wb_gains.r / div) & 0xFFFF);
 	abs_gains[1] = (u16)((avg_g / div) & 0xFFFF);
-	abs_gains[2] = (u16)((wb_gains.gb / div) & 0xFFFF);
+	abs_gains[2] = (u16)((wb_gains.b / div) & 0xFFFF);
 
 	dbg_sensor(1, "[SEN:%d]%s: abs_gain_r(0x%4X), abs_gain_g(0x%4X), abs_gain_b(0x%4X)\n",
 		cis->id, __func__, abs_gains[0], abs_gains[1], abs_gains[2]);
@@ -1965,6 +2443,81 @@ p_err:
 	return ret;
 }
 
+int sensor_gw1_cis_wait_streamoff(struct v4l2_subdev *subdev)
+{
+	int ret = 0;
+	struct fimc_is_cis *cis;
+	struct i2c_client *client;
+	cis_shared_data *cis_data;
+	u32 wait_cnt = 0, time_out_cnt = 250;
+	u8 sensor_fcount = 0;
+
+	FIMC_BUG(!subdev);
+
+	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(subdev);
+	if (unlikely(!cis)) {
+		err("cis is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	cis_data = cis->cis_data;
+	if (unlikely(!cis_data)) {
+		err("cis_data is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	client = cis->client;
+	if (unlikely(!client)) {
+		err("client is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	I2C_MUTEX_LOCK(cis->i2c_lock);
+	ret = fimc_is_sensor_read8(client, 0x0005, &sensor_fcount);
+	I2C_MUTEX_UNLOCK(cis->i2c_lock);
+
+	if (ret < 0)
+		err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0005, sensor_fcount, ret);
+
+	/*
+	 * Read sensor frame counter (sensor_fcount address = 0x0005)
+	 * stream on (0x00 ~ 0xFE), stream off (0xFF)
+	 */
+	while (sensor_fcount != 0xFF) {
+		I2C_MUTEX_LOCK(cis->i2c_lock);
+		ret = fimc_is_sensor_read8(client, 0x0005, &sensor_fcount);
+		I2C_MUTEX_UNLOCK(cis->i2c_lock);
+		if (ret < 0)
+			err("i2c transfer fail addr(%x), val(%x), ret = %d\n", 0x0005, sensor_fcount, ret);
+
+		usleep_range(CIS_STREAM_OFF_WAIT_TIME, CIS_STREAM_OFF_WAIT_TIME);
+		wait_cnt++;
+
+		if (wait_cnt >= time_out_cnt) {
+			err("[MOD:D:%d] %s, time out, wait_limit(%d) > time_out(%d), sensor_fcount(%d)",
+					cis->id, __func__, wait_cnt, time_out_cnt, sensor_fcount);
+			ret = -EINVAL;
+			goto p_err;
+		}
+
+		dbg_sensor(1, "[MOD:D:%d] %s, sensor_fcount(%d), (wait_limit(%d) < time_out(%d))\n",
+				cis->id, __func__, sensor_fcount, wait_cnt, time_out_cnt);
+	}
+
+	msleep(10);
+
+#ifdef CONFIG_SENSOR_RETENTION_USE
+	/* retention mode CRC wait calculation */
+	usleep_range(5000, 5000);
+#endif
+p_err:
+	info("%s: Wait Stream Off Done", __func__);
+	return ret;
+}
+
 static struct fimc_is_cis_ops cis_ops_gw1 = {
 	.cis_init = sensor_gw1_cis_init,
 	.cis_log_status = sensor_gw1_cis_log_status,
@@ -1990,7 +2543,8 @@ static struct fimc_is_cis_ops cis_ops_gw1 = {
 	.cis_set_digital_gain = sensor_gw1_cis_set_digital_gain,
 	.cis_get_digital_gain = sensor_gw1_cis_get_digital_gain,
 	.cis_compensate_gain_for_extremely_br = sensor_cis_compensate_gain_for_extremely_br,
-	.cis_wait_streamoff = sensor_cis_wait_streamoff,
+	.cis_set_long_term_exposure = sensor_gw1_cis_long_term_exposure,
+	.cis_wait_streamoff = sensor_gw1_cis_wait_streamoff,
 	.cis_wait_streamon = sensor_cis_wait_streamon,
 	.cis_data_calculation = sensor_gw1_cis_data_calc,
 	.cis_set_adjust_sync = sensor_gw1_cis_set_adjust_sync,

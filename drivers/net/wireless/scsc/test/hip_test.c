@@ -152,7 +152,7 @@ int scsc_wifi_transmit_frame(struct slsi_hip4 *hip, bool ctrl_packet, struct sk_
 
 	slsi_log_clients_log_signal_fast(sdev, &sdev->log_clients, skb, SLSI_LOG_DIRECTION_FROM_HOST);
 
-	slsi_kfree_skb(skb);
+	consume_skb(skb);
 
 	return 0;
 }

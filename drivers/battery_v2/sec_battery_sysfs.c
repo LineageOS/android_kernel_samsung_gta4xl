@@ -216,6 +216,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(factory_mode_bypass),
 	SEC_BATTERY_ATTR(normal_mode_bypass),
 	SEC_BATTERY_ATTR(factory_voltage_regulation),
+	SEC_BATTERY_ATTR(volt_slope),
 };
 
 void update_external_temp_table(struct sec_battery_info *battery, int temp[])
@@ -549,18 +550,15 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		{
 			int check_val = 0;
 
-			if (is_hv_wire_12v_type(battery->cable_type)) {
+			if (is_hv_wire_12v_type(battery->cable_type) ||
+				battery->max_charge_power >= HV_CHARGER_STATUS_STANDARD2) {
 				check_val = 2;
 			} else if (is_hv_wire_type(battery->cable_type) ||
-				battery->wire_status == SEC_BATTERY_CABLE_PREPARE_TA) {
-				check_val = 1;
-			} else if (is_pd_wire_type(battery->cable_type)) {
-				if (battery->pd_max_charge_power >= HV_CHARGER_STATUS_STANDARD1 &&
-					battery->pdic_info.sink_status.available_pdo_num > 1)
-					check_val = 1;
-			} else if (battery->max_charge_power >= HV_CHARGER_STATUS_STANDARD2) {
-				check_val = 2;
-			} else if (battery->max_charge_power >= HV_CHARGER_STATUS_STANDARD1) {
+				(is_pd_wire_type(battery->cable_type) &&
+				battery->pd_max_charge_power >= HV_CHARGER_STATUS_STANDARD1 &&
+				battery->pdic_info.sink_status.available_pdo_num > 1) ||
+				battery->wire_status == SEC_BATTERY_CABLE_PREPARE_TA ||
+				battery->max_charge_power >= HV_CHARGER_STATUS_STANDARD1) {
 				check_val = 1;
 			}
 
@@ -683,7 +681,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			psy_do_property(battery->pdata->fgsrc_switch_name, set,
 					POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING, value);
 			for (j = 0; j < 10; j++) {
-				mdelay(175);
+				msleep(175);
 				psy_do_property(battery->pdata->fuelgauge_name, get,
 					POWER_SUPPLY_PROP_VOLTAGE_NOW, value);
 				ocv_data[j] = value.intval;
@@ -1455,6 +1453,18 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case NORMAL_MODE_BYPASS:
 		break;
 	case FACTORY_VOLTAGE_REGULATION:
+		break;
+	case VOLT_SLOPE:
+		{
+		union power_supply_propval volt_cal;
+
+			volt_cal.intval = 1;
+			psy_do_property(battery->pdata->fuelgauge_name, get,
+				POWER_SUPPLY_EXT_PROP_MEASURE_SYS, volt_cal);
+
+			i += scnprintf(buf + i, PAGE_SIZE - i, "0x%04x\n",
+					volt_cal.intval);
+		}
 		break;
 	default:
 		i = -EINVAL;
@@ -2973,6 +2983,8 @@ ssize_t sec_bat_store_attrs(
 			sec_bat_get_battery_info(battery);
 		}
 		ret = count;
+		break;
+	case VOLT_SLOPE:
 		break;
 	default:
 		ret = -EINVAL;

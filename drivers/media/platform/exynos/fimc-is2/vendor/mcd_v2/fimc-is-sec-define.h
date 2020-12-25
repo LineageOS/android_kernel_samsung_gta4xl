@@ -122,6 +122,7 @@
 #define FIMC_IS_2X5_SETF			"setfile_2x5.bin"
 #define FIMC_IS_GM2_SETF			"setfile_gm2.bin"
 #define FIMC_IS_GW1_SETF			"setfile_gw1.bin"
+#define FIMC_IS_GD1_SETF			"setfile_gd1.bin"
 
 #define FIMC_IS_IMX258_SETF			"setfile_imx258.bin"
 #define FIMC_IS_IMX576_SETF			"setfile_imx576.bin"
@@ -129,12 +130,14 @@
 #define FIMC_IS_IMX582_SETF			"setfile_imx582.bin"
 #define FIMC_IS_IMX586_SETF			"setfile_imx586.bin"
 #define FIMC_IS_IMX616_SETF			"setfile_imx616.bin"
+#define FIMC_IS_IMX682_SETF			"setfile_imx682.bin"
 
 #define FIMC_IS_SR556_SETF			"setfile_sr556.bin"
 #define FIMC_IS_SR846_FRONT_SETF	"setfile_sr846_front.bin"
 
 #define FIMC_IS_GC5035_SETF			"setfile_gc5035.bin"
 #define FIMC_IS_HI1336_SETF			"setfile_hi1336.bin"
+#define FIMC_IS_HI2021Q_SETF			"setfile_hi2021q.bin"
 
 #define FIMC_IS_CAL_SDCARD_FRONT		"/data/cal_data_front.bin"
 #define FIMC_IS_FW_FROM_SDCARD			"/data/media/0/CamFW_Main.bin"

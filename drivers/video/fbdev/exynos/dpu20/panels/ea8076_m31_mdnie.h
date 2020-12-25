@@ -3454,7 +3454,7 @@ static unsigned char AUTO_GALLERY_5[] = {
 	0xff, // crc_lut_mode1_rr
 	0x00, // crc_lut_mode1_rg
 	0x00, // crc_lut_mode1_rb
-	0x00, // crc_lut_mode1_gr
+	0x14, // crc_lut_mode1_gr
 	0xff, // crc_lut_mode1_gg
 	0x00, // crc_lut_mode1_gb
 	0x00, // crc_lut_mode1_br
@@ -3701,7 +3701,7 @@ static unsigned char AUTO_CAMERA_5[] = {
 	0xff, // crc_lut_mode1_rr
 	0x00, // crc_lut_mode1_rg
 	0x00, // crc_lut_mode1_rb
-	0x00, // crc_lut_mode1_gr
+	0x14, // crc_lut_mode1_gr
 	0xff, // crc_lut_mode1_gg
 	0x00, // crc_lut_mode1_gb
 	0x00, // crc_lut_mode1_br
@@ -5612,6 +5612,247 @@ static unsigned char LOCAL_CE_6[] = {
 	0x00, // ore_bypass
 };
 
+static unsigned char HDR_1[] = {
+	0x81, // CRC, BLF
+	0x90, // CRC on/off, BLF on/off, CRC on/off 0 0 00 00 00 
+};
+
+static unsigned char HDR_2[] = {
+	0x83, // TCS
+	0x00, // 0x80 : TCS_enable, 0x00 : TCS_disable
+};
+
+static unsigned char HDR_3[] = {
+	0x85, // ACE
+	0x00, // 0x00 : ACE_Disable, 0x9F : ACE_Enable, Default Gain
+};
+
+static unsigned char HDR_4[] = {
+	0x87, // ORE
+	0x00, // 0x00 : ORE_Disable, 0x80 : ORE_Enable
+	0x00, // ORE_level, ex) 0xff : ORE_255_Step(max), 0x00 : ORE_0_step (min)
+};
+
+static unsigned char HDR_5[] = {
+	0xB1, // CRC, BLF
+	0x00, // crc_bypass
+	0xb6, // crc_lut_mode1_rr
+	0x00, // crc_lut_mode1_rg
+	0x00, // crc_lut_mode1_rb
+	0x1e, // crc_lut_mode1_gr
+	0xff, // crc_lut_mode1_gg
+	0x00, // crc_lut_mode1_gb
+	0x06, // crc_lut_mode1_br
+	0x05, // crc_lut_mode1_bg
+	0xca, // crc_lut_mode1_bb
+	0x20, // crc_lut_mode1_cr
+	0xf0, // crc_lut_mode1_cg
+	0xe0, // crc_lut_mode1_cb
+	0xda, // crc_lut_mode1_mr
+	0x00, // crc_lut_mode1_mg
+	0xd6, // crc_lut_mode1_mb
+	0xda, // crc_lut_mode1_yr
+	0xd6, // crc_lut_mode1_yg
+	0x00, // crc_lut_mode1_yb
+	0xff, // crc_lut_mode1_wr
+	0xfa, // crc_lut_mode1_wg
+	0xf0, // crc_lut_mode1_wb
+	0xf1, // crc_lut_mode2_rr
+	0x14, // crc_lut_mode2_rg
+	0x07, // crc_lut_mode2_rb
+	0x00, // crc_lut_mode2_gr
+	0xb4, // crc_lut_mode2_gg
+	0x07, // crc_lut_mode2_gb
+	0x07, // crc_lut_mode2_br
+	0x06, // crc_lut_mode2_bg
+	0xc1, // crc_lut_mode2_bb
+	0x00, // crc_lut_mode2_cr
+	0xd0, // crc_lut_mode2_cg
+	0xc9, // crc_lut_mode2_cb
+	0xff, // crc_lut_mode2_mr
+	0x1b, // crc_lut_mode2_mg
+	0xd2, // crc_lut_mode2_mb
+	0xe4, // crc_lut_mode2_yr
+	0xde, // crc_lut_mode2_yg
+	0x0f, // crc_lut_mode2_yb
+	0xff, // crc_lut_mode2_wr
+	0xff, // crc_lut_mode2_wg
+	0xff, // crc_lut_mode2_wb
+	0xff, // crc_lut_mode3_rr
+	0x00, // crc_lut_mode3_rg
+	0x00, // crc_lut_mode3_rb
+	0x00, // crc_lut_mode3_gr
+	0xff, // crc_lut_mode3_gg
+	0x00, // crc_lut_mode3_gb
+	0x00, // crc_lut_mode3_br
+	0x00, // crc_lut_mode3_bg
+	0xff, // crc_lut_mode3_bb
+	0x00, // crc_lut_mode3_cr
+	0xff, // crc_lut_mode3_cg
+	0xff, // crc_lut_mode3_cb
+	0xff, // crc_lut_mode3_mr
+	0x00, // crc_lut_mode3_mg
+	0xff, // crc_lut_mode3_mb
+	0xff, // crc_lut_mode3_yr
+	0xff, // crc_lut_mode3_yg
+	0x00, // crc_lut_mode3_yb
+	0xff, // crc_lut_mode3_wr
+	0xff, // crc_lut_mode3_wg
+	0xff, // crc_lut_mode3_wb
+	0x30, // blf_fixed_parameter
+	0x00, // blue_light_reduction_level 0 - ff
+	0x66,
+	0xb2,
+	0xff,
+	0x14, // Diff LUT #0, Red, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x00,
+	0x11, // Diff LUT #0, Green, [r:8bit, g:8bit, b:8bit]
+	0x24,
+	0x00,
+	0x04, // Diff LUT #0, Blue, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x41,
+	0x14, // Diff LUT #0, Cyan, [r:8bit, g:8bit, b:8bit]
+	0x24,
+	0x41,
+	0x11, // Diff LUT #0, Magenta, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x41,
+	0x04, // Diff LUT #0, Yellow, [r:8bit, g:8bit, b:8bit]
+	0x24,
+	0x00,
+	0x00, // Diff LUT #0, White, [r:8bit, g:8bit, b:8bit]
+	0x24,
+	0x41,
+	0x1f, // Diff LUT #1, Red, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x00,
+	0x19, // Diff LUT #1, Green, [r:8bit, g:8bit, b:8bit]
+	0x35,
+	0x00,
+	0x04, // Diff LUT #1, Blue, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x66,
+	0x1e, // Diff LUT #1, Cyan, [r:8bit, g:8bit, b:8bit]
+	0x35,
+	0x66,
+	0x19, // Diff LUT #1, Magenta, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x66,
+	0x04, // Diff LUT #1, Yellow, [r:8bit, g:8bit, b:8bit]
+	0x35,
+	0x00,
+	0x00, // Diff LUT #1, White, [r:8bit, g:8bit, b:8bit]
+	0x35,
+	0x66,
+	0x1d, // Diff LUT #2, Red, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x00,
+	0x1d, // Diff LUT #2, Green, [r:8bit, g:8bit, b:8bit]
+	0x38,
+	0x00,
+	0x01, // Diff LUT #2, Blue, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x3c,
+	0x1e, // Diff LUT #2, Cyan, [r:8bit, g:8bit, b:8bit]
+	0x38,
+	0x3c,
+	0x1d, // Diff LUT #2, Magenta, [r:8bit, g:8bit, b:8bit]
+	0x00,
+	0x3c,
+	0x01, // Diff LUT #2, Yellow, [r:8bit, g:8bit, b:8bit]
+	0x38,
+	0x00,
+	0x00, // Diff LUT #2, White, [r:8bit, g:8bit, b:8bit]
+	0x38,
+	0x3c,
+};
+
+static unsigned char HDR_6[] = {
+	0xB3, // ACE , TCS, ORE
+	0x80, // skin_boundary_parameter
+	0x41,
+	0x36,
+	0x00,
+	0x00,
+	0x04,
+	0x36,
+	0x00,
+	0x00,
+	0x04,
+	0x0e,
+	0x35,
+	0x00,
+	0x7e,
+	0x1a,
+	0x80,
+	0x00,
+	0xb4,
+	0x00,
+	0x1d,
+	0x09,
+	0xba,
+	0x00,
+	0x36,
+	0x09,
+	0x44,
+	0x64,
+	0xa0, // Skin Color Gain (0x00 ~ 0xFF)
+	0x6a, // Target Skin Color (Cb)
+	0x9a, // Target Skin Color (Cr)
+	0x01, // Threshold Value of Skin Color Detection
+	0x32, // Minumum Y of Skin Brightness Control
+	0xdc, // Maximum Y of Skin Brightness Control
+	0x88, // Reference Y of Skin Brightness Control
+	0x91, // Target Y of Skin Brihgtness Contol
+	0x00, // Skin Brightness Parameter
+	0xa3,
+	0xab,
+	0x06,
+	0xda,
+	0x8d,
+	0x65,
+	0x72,
+	0x49,
+	0x00, // ace_bypass
+	0xf0,
+	0x00,
+	0xcf,
+	0xff,
+	0xc8,
+	0xc8,
+	0xff,
+	0xff,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x00,
+	0x05,
+	0x00,
+	0x64,
+	0x1e,
+	0x1e,
+	0x10,
+	0x01,
+	0x30,
+	0x10,
+	0x64,
+	0x02,
+	0x10,
+	0x08,
+	0x10,
+	0x00,
+	0x20,
+	0x10,
+	0x04,
+	0x10,
+	0x0a,
+	0x00,
+	0x00, // ore_bypass
+};
+
 static unsigned char LEVEL_UNLOCK[] = {
 	0xF0,
 	0x5A, 0x5A
@@ -5684,6 +5925,14 @@ static struct mdnie_table light_notification_table[LIGHT_NOTIFICATION_MAX] = {
 	[LIGHT_NOTIFICATION_ON] = MDNIE_SET(LIGHT_NOTIFICATION)
 };
 
+static struct mdnie_table hdr_table[HDR_MAX] = {
+	[HDR_ON] = MDNIE_SET(HDR),
+	MDNIE_SET(HDR),
+	MDNIE_SET(HDR),
+	MDNIE_SET(HDR),
+	MDNIE_SET(HDR)
+};
+
 static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 	{
 		MDNIE_SET(DYNAMIC_UI),
@@ -5697,7 +5946,7 @@ static struct mdnie_table main_table[SCENARIO_MAX][MODE_MAX] = {
 		MDNIE_SET(STANDARD_UI),
 		MDNIE_SET(NATURAL_UI),
 		MDNIE_SET(AUTO_UI),
-		MDNIE_SET(AUTO_UI),
+		MDNIE_SET(AUTO_GALLERY),
 		MDNIE_SET(AUTO_EBOOK)
 	},
 	[CAMERA_MODE] = {
@@ -5755,6 +6004,7 @@ static struct mdnie_tune tune_info = {
 	.night_table = night_table,
 	.lens_table = lens_table,
 	.light_notification_table = light_notification_table,
+	.hdr_table = hdr_table,
 
 #ifdef CONFIG_LCD_HMT
 	.hmt_table = hmt_table,

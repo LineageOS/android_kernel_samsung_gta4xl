@@ -781,6 +781,12 @@ static int _decon_disable(struct decon_device *decon, enum decon_state state)
 		decon->eint_status = 0;
 	}
 
+	if (decon->dt.out_type == DECON_OUT_DSI && decon->dt.psr_mode == DECON_VIDEO_MODE) { 
+		struct dsim_device *dsim; 
+		dsim = v4l2_get_subdevdata(decon->out_sd[0]); 
+		call_panel_ops(dsim, suspend, dsim); 
+	} 
+
 	ret = decon_reg_stop(decon->id, decon->dt.out_idx[0], &psr, true,
 			decon->lcd_info->fps);
 	if (ret < 0)
@@ -1805,13 +1811,22 @@ static int decon_set_mask_layer(struct decon_device *decon, struct decon_reg_dat
 		return 0;
 	}
 
+	decon_systrace(decon, 'C', "decon_mask_layer", 1);
 	decon_abd_save_str(&decon->abd, "mask_te_0");
 	decon_wait_for_vsync(decon, VSYNC_TIMEOUT_MSEC);
 	decon_info("%s: MASK_LAYER TE 1\n", __func__);
 	decon_abd_save_str(&decon->abd, "mask_te_1");
-
+	decon_systrace(decon, 'C', "decon_mask_layer", 0);
 	decon->mask_regs = regs;
 	ret = call_panel_ops(dsim, mask_brightness, dsim);
+
+	/* clear wait_mask_layer_trigger */
+	if (decon->wait_mask_layer_trigger) {
+		decon->wait_mask_layer_trigger = 0;
+		decon_info("wait_mask_layer_trigger [clear] wait:%d\n",
+			decon->wait_mask_layer_trigger);
+		wake_up_interruptible_all(&decon->wait_mask_layer_trigger_queue);
+	}
 
 	return 1; /* return 1 for checking trigger done */
 }
@@ -2461,10 +2476,13 @@ static void decon_update_regs_handler(struct kthread_work *work)
 	mutex_unlock(&decon->up.lock);
 
 	list_for_each_entry_safe(data, next, &saved_list, list) {
+		decon_systrace(decon, 'C', "update_regs_list_cnt", decon->update_regs_list_cnt);
 		decon_systrace(decon, 'C', "update_regs_list", 1);
 
 		decon_set_cursor_reset(decon, data);
 		decon_update_regs(decon, data);
+		decon->update_regs_list_cnt--;
+		decon_systrace(decon, 'C', "update_regs_list_cnt", decon->update_regs_list_cnt);
 #if defined(CONFIG_EXYNOS_READ_ESD_SOLUTION)
 		memcpy(&decon->last_regs, data, sizeof(struct decon_reg_data));
 #endif
@@ -2628,6 +2646,14 @@ static bool decon_get_mask_layer(struct decon_device *decon,
 		}
 	}
 
+	/* normal -> mask set wait_mask_layer_trigger */
+	/* mask -> normal set wait_mask_layer_trigger */
+	if (mask != decon->current_mask_layer) {
+		decon->wait_mask_layer_trigger = 1;
+		decon_info("wait_mask_layer_trigger [set] wait:%d\n",
+			decon->wait_mask_layer_trigger);
+	}
+
 	return mask;
 }
 #endif
@@ -2720,10 +2746,29 @@ static int decon_set_win_config(struct decon_device *decon,
 
 	mutex_lock(&decon->up.lock);
 	list_add_tail(&regs->list, &decon->up.list);
+	decon->update_regs_list_cnt++;
 	mutex_unlock(&decon->up.lock);
 	kthread_queue_work(&decon->up.worker, &decon->up.work);
 
 	mutex_unlock(&decon->lock);
+#if defined(CONFIG_SUPPORT_MASK_LAYER)
+	if (decon->wait_mask_layer_trigger) {
+		int timeout = 0;
+		timeout = wait_event_interruptible_timeout(decon->wait_mask_layer_trigger_queue,
+				!decon->wait_mask_layer_trigger,
+				msecs_to_jiffies(100));
+		if (timeout > 0) {
+			decon_info("wait_mask_layer_trigger [wq] wait:%d cnt:%d\n",
+				decon->wait_mask_layer_trigger,
+				decon->update_regs_list_cnt);
+		} else {
+			decon->wait_mask_layer_trigger = 0; /* force clear */
+			decon_info("wait_mask_layer_trigger [wq] wait:%d cnt:%d [TIMEOUT!!]\n",
+				decon->wait_mask_layer_trigger,
+				decon->update_regs_list_cnt);
+		}
+	}
+#endif
 	decon_systrace(decon, 'C', "decon_win_config", 0);
 
 	decon_dbg("%s -\n", __func__);
@@ -4003,6 +4048,9 @@ static int decon_probe(struct platform_device *pdev)
 	spin_lock_init(&decon->slock);
 	init_waitqueue_head(&decon->vsync.wait);
 	init_waitqueue_head(&decon->wait_vstatus);
+#if defined(CONFIG_SUPPORT_MASK_LAYER)
+	init_waitqueue_head(&decon->wait_mask_layer_trigger_queue);
+#endif
 	mutex_init(&decon->vsync.lock);
 	mutex_init(&decon->lock);
 	mutex_init(&decon->pm_lock);

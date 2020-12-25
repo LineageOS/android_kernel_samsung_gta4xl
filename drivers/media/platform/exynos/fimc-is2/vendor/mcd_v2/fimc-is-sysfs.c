@@ -167,7 +167,7 @@ int svc_cheating_prevent_device_file_create(struct kobject **obj)
 		/* try to create svc kobject */
 		data = kobject_create_and_add("svc", &devices_kset->kobj);
 		if (IS_ERR_OR_NULL(data))
-		        pr_info("Failed to create sys/devices/svc already exist svc : 0x%pK\n", data);
+			pr_info("Failed to create sys/devices/svc already exist svc : 0x%pK\n", data);
 		else
 			pr_info("Success to create sys/devices/svc svc : 0x%pK\n", data);
 	} else {
@@ -177,10 +177,9 @@ int svc_cheating_prevent_device_file_create(struct kobject **obj)
 
 	Camera = kobject_create_and_add("Camera", data);
 	if (IS_ERR_OR_NULL(Camera))
-	        pr_info("Failed to create sys/devices/svc/Camera : 0x%pK\n", Camera);
+		pr_info("Failed to create sys/devices/svc/Camera : 0x%pK\n", Camera);
 	else
 		pr_info("Success to create sys/devices/svc/Camera : 0x%pK\n", Camera);
-
 
 	*obj = Camera;
 	return 0;
@@ -327,7 +326,6 @@ static ssize_t camera_tilt_show(char *buf, int position)
 	char *cal_buf = NULL;
 	int32_t dual_tilt_dll_modelID = 0;
 	int32_t dual_tilt_dll_modelIDLength = 0;
-
 	struct fimc_is_vender_specific *specific = sysfs_core->vender.private_data;
 
 	if (specific->rom_share[position].check_rom_share == true) {
@@ -339,7 +337,7 @@ static ssize_t camera_tilt_show(char *buf, int position)
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, rom_position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (specific->rom_cal_map_addr[rom_position]->rom_dual_cal_data2_size > 0) {
@@ -353,10 +351,17 @@ static ssize_t camera_tilt_show(char *buf, int position)
 		int32_t dual_tilt_avg_err = specific->rom_cal_map_addr[rom_position]->rom_dual_tilt_avg_err_addr;
 		int32_t dual_tilt_dll_version = specific->rom_cal_map_addr[rom_position]->rom_dual_tilt_dll_version_addr;
 
+#ifdef USE_DUALCAM_SET_CAL
+		if (specific->use_dualcam_set_cal) {
+			return sprintf(buf, "1 0 0 0 0 0 0 0 0 0 \n");
+		}
+#endif
 		if (specific->rom_cal_map_addr[rom_position]->extend_cal_addr) {
 			struct rom_dual_tilt_cal_data *dual_tiltcal_data = NULL;
 			
-			dual_tiltcal_data = (struct rom_dual_tilt_cal_data *)fimc_is_sys_search_rom_extend_data(specific->rom_cal_map_addr[rom_position]->extend_cal_addr, EXTEND_DUAL_CAL);
+			dual_tiltcal_data = (struct rom_dual_tilt_cal_data *)fimc_is_sys_search_rom_extend_data(
+									specific->rom_cal_map_addr[rom_position]->extend_cal_addr,
+									EXTEND_DUAL_CAL);
 
 			if(dual_tiltcal_data){
 				dual_tilt_dll_modelID = dual_tiltcal_data->rom_dual_tilt_dll_modelID_addr;
@@ -382,17 +387,17 @@ static ssize_t camera_tilt_show(char *buf, int position)
 			dll_version = (s32 *)&cal_buf[dual_tilt_dll_version];
 			modelID = (char *)&cal_buf[dual_tilt_dll_modelID];
 			
-			strncpy(temp_buffer,modelID,dual_tilt_dll_modelIDLength);
+			strncpy(temp_buffer, modelID, dual_tilt_dll_modelIDLength);
 			temp_buffer[dual_tilt_dll_modelIDLength] = '\0';
 			info("%s -- Model ID = %s\n", __func__, temp_buffer);
 
 			return sprintf(buf, "1 %d %d %d %d %d %d %d %d %d %s\n",
 								*x, *y, *z, *sx, *sy, *range, *max_err, *avg_err, *dll_version, temp_buffer);
 		} else {
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 #endif
@@ -813,7 +818,7 @@ static ssize_t camera_rear_checkfw_user_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, SENSOR_POSITION_REAR)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if(crc32_check_list[SENSOR_POSITION_REAR][CRC32_CHECK_FW_VER]) {
@@ -829,17 +834,17 @@ static ssize_t camera_rear_checkfw_user_show(struct device *dev,
 #endif
 			) {
 				err(" NG, not latest cam module");
-				return sprintf(buf, "%s\n", "NG");
+				return sprintf(buf, "NG\n");
 			} else {
-				return sprintf(buf, "%s\n", "OK");
+				return sprintf(buf, "OK\n");
 			}
 		} else {
 			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -860,7 +865,7 @@ static ssize_t camera_rear_checkfw_factory_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, SENSOR_POSITION_REAR)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG_VER");
+		return sprintf(buf, "NG_VER\n");
 	}
 
 	if(crc32_check_list[SENSOR_POSITION_REAR][CRC32_CHECK_FW_VER]) {
@@ -954,7 +959,7 @@ static ssize_t camera_hw_init_show(struct device *dev,
 #endif
 	}
 
-	return sprintf(buf, "%s\n", "HW init done.");
+	return sprintf(buf, "HW init done.\n");
 }
 
 static ssize_t camera_supported_cameraIds_show(struct device *dev,
@@ -1077,7 +1082,8 @@ static ssize_t camera_rear_force_cal_load_show(struct device *dev,
 static DEVICE_ATTR(rear_sensorid,        S_IRUGO, camera_rear_sensorid_show,        NULL);
 static DEVICE_ATTR(rear_moduleid,        S_IRUGO, camera_rear_moduleid_show,        NULL);
 static DEVICE_ATTR(rear_camtype,         S_IRUGO, camera_rear_camtype_show,         NULL);
-static DEVICE_ATTR(rear_camfw,           S_IRUGO, camera_rear_camfw_show,           camera_rear_camfw_write);
+static DEVICE_ATTR(rear_camfw,           S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+                                                  camera_rear_camfw_show,           camera_rear_camfw_write);
 static DEVICE_ATTR(rear_camfw_full,      S_IRUGO, camera_rear_camfw_full_show,      NULL);
 static DEVICE_ATTR(rear_caminfo,         S_IRUGO, camera_rear_info_show,            NULL);
 static DEVICE_ATTR(rear_checkfw_user,    S_IRUGO, camera_rear_checkfw_user_show,    NULL);
@@ -1091,8 +1097,8 @@ static DEVICE_ATTR(rear_sensorid_exif,   S_IRUGO, camera_rear_sensorid_exif_show
 static DEVICE_ATTR(rear_mtf_exif,        S_IRUGO, camera_rear_mtf_exif_show,        NULL);
 static DEVICE_ATTR(rear_afcal,           S_IRUGO, camera_rear_afcal_show,           NULL);
 #if defined(REAR_SUB_CAMERA)
-static DEVICE_ATTR(rear_dualcal,         S_IRUGO, camera_rear_dualcal_show,          NULL);
-static DEVICE_ATTR(rear_dualcal_size,    S_IRUGO, camera_rear_dualcal_size_show,     NULL);
+static DEVICE_ATTR(rear_dualcal,         S_IRUGO, camera_rear_dualcal_show,         NULL);
+static DEVICE_ATTR(rear_dualcal_size,    S_IRUGO, camera_rear_dualcal_size_show,    NULL);
 #endif
 #ifdef FORCE_CAL_LOAD
 static DEVICE_ATTR(rear_force_cal_load,  S_IRUGO, camera_rear_force_cal_load_show,  NULL);
@@ -1420,24 +1426,24 @@ static ssize_t camera_front_checkfw_user_show(struct device *dev,
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
 		if (crc32_check_list[position][CRC32_CHECK_FACTORY]) {
 			if (!check_latest_cam_module[position]) {
 				err(" NG, not latest cam module");
-				return sprintf(buf, "%s\n", "NG");
+				return sprintf(buf, "NG\n");
 			} else {
-				return sprintf(buf, "%s\n", "OK");
+				return sprintf(buf, "OK\n");
 			}
 		} else {
 			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -1450,7 +1456,7 @@ static ssize_t camera_front_checkfw_factory_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, SENSOR_POSITION_FRONT)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG_VER");
+		return sprintf(buf, "NG_VER\n");
 	}
 
 	if (crc32_check_list[SENSOR_POSITION_FRONT][CRC32_CHECK_FACTORY]) {
@@ -1813,24 +1819,24 @@ static ssize_t camera_rear2_checkfw_user_show(struct device *dev,
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
 		if (crc32_check_list[position][CRC32_CHECK_FACTORY]) {
 			if (!check_latest_cam_module[position]) {
 				err(" NG, not latest cam module");
-				return sprintf(buf, "%s\n", "NG");
+				return sprintf(buf, "NG\n");
 			} else {
-				return sprintf(buf, "%s\n", "OK");
+				return sprintf(buf, "OK\n");
 			}
 		} else {
 			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -1844,7 +1850,7 @@ static ssize_t camera_rear2_checkfw_factory_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid FROM version");
-		return sprintf(buf, "%s\n", "NG_VER");
+		return sprintf(buf, "NG_VER\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
@@ -2223,24 +2229,24 @@ static ssize_t camera_front2_checkfw_user_show(struct device *dev,
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
 		if (crc32_check_list[position][CRC32_CHECK_FACTORY]) {
 			if (!check_latest_cam_module[position]) {
 				err(" NG, not latest cam module");
-				return sprintf(buf, "%s\n", "NG");
+				return sprintf(buf, "NG\n");
 			} else {
-				return sprintf(buf, "%s\n", "OK");
+				return sprintf(buf, "OK\n");
 			}
 		} else {
 			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -2254,7 +2260,7 @@ static ssize_t camera_front2_checkfw_factory_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG_VER");
+		return sprintf(buf, "NG_VER\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
@@ -2355,7 +2361,7 @@ static ssize_t camera_front2_shift_x_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (specific->rom_cal_map_addr[position]->rom_dual_cal_data2_size > 0) {
@@ -2367,10 +2373,10 @@ static ssize_t camera_front2_shift_x_show(struct device *dev,
 			x = (u32 *)&cal_buf[dual_shift_x];
 			return sprintf(buf, "%d\n", *x);
 		} else {
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -2387,7 +2393,7 @@ static ssize_t camera_front2_shift_y_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (specific->rom_cal_map_addr[position]->rom_dual_cal_data2_size > 0) {
@@ -2399,10 +2405,10 @@ static ssize_t camera_front2_shift_y_show(struct device *dev,
 			y = (u32 *)&cal_buf[dual_shift_y];
 			return sprintf(buf, "%d\n", *y);
 		} else {
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 #endif
@@ -2439,8 +2445,8 @@ static DEVICE_ATTR(front2_shift_y,         S_IRUGO, camera_front2_shift_y_show, 
  * rear3_checkfw_factory     - camera_rear3_checkfw_factory_show                   *****
  * rear3_sensorid_exif       - camera_rear3_sensorid_exif_show                     *****
  * rear3_mtf_exif            - camera_rear3_mtf_exif_show                          *****
- * rear3_dualcal             - camera_rear3_dualcal_show                          *****
- * rear3_dualcal_size        - camera_rear3_dualcal_size_show                          *****
+ * rear3_dualcal             - camera_rear3_dualcal_show                           *****
+ * rear3_dualcal_size        - camera_rear3_dualcal_size_show                      *****
  *                                                                                 *****
  ***************************************************************************************/
 
@@ -2724,24 +2730,24 @@ static ssize_t camera_rear3_checkfw_user_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
 		if (crc32_check_list[position][CRC32_CHECK_FACTORY]) {
 			if (!check_latest_cam_module[position]) {
 				err(" NG, not latest cam module");
-				return sprintf(buf, "%s\n", "NG");
+				return sprintf(buf, "NG\n");
 			} else {
-				return sprintf(buf, "%s\n", "OK");
+				return sprintf(buf, "OK\n");
 			}
 		} else {
 			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -2755,7 +2761,7 @@ static ssize_t camera_rear3_checkfw_factory_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG_VER");
+		return sprintf(buf, "NG_VER\n" );
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
@@ -2819,7 +2825,6 @@ static ssize_t camera_rear3_dualcal_show(struct device *dev,
 	dual_cal_data2_addr = specific->rom_cal_map_addr[position]->rom_dual_cal_data2_start_addr;
 	dual_cal_data2_size = specific->rom_cal_map_addr[position]->rom_dual_cal_data2_size;
 
-
 	if (dual_cal_data2_addr > 0 && dual_cal_data2_size > 0) {
 		memcpy(buf, &cal_buf[dual_cal_data2_addr], dual_cal_data2_size);
 	  	return dual_cal_data2_size;
@@ -2860,8 +2865,8 @@ static DEVICE_ATTR(rear3_checkfw_factory, S_IRUGO, camera_rear3_checkfw_factory_
 static DEVICE_ATTR(rear3_sensorid_exif,   S_IRUGO, camera_rear3_sensorid_exif_show,   NULL);
 static DEVICE_ATTR(rear3_mtf_exif,        S_IRUGO, camera_rear3_mtf_exif_show,        NULL);
 #if defined(REAR_SUB_CAMERA)
-static DEVICE_ATTR(rear3_dualcal,         S_IRUGO, camera_rear3_dualcal_show,          NULL);
-static DEVICE_ATTR(rear3_dualcal_size,    S_IRUGO, camera_rear3_dualcal_size_show,     NULL);
+static DEVICE_ATTR(rear3_dualcal,         S_IRUGO, camera_rear3_dualcal_show,         NULL);
+static DEVICE_ATTR(rear3_dualcal_size,    S_IRUGO, camera_rear3_dualcal_size_show,    NULL);
 static DEVICE_ATTR(rear3_tilt,            S_IRUGO, camera_rear3_tilt_show,            NULL);
 #endif
 #ifndef USE_SHARED_ROM_REAR3
@@ -3168,24 +3173,24 @@ static ssize_t camera_rear4_checkfw_user_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
 		if (crc32_check_list[position][CRC32_CHECK_FACTORY]) {
 			if (!check_latest_cam_module[position]) {
 				err(" NG, not latest cam module");
-				return sprintf(buf, "%s\n", "NG");
+				return sprintf(buf, "NG\n");
 			} else {
-				return sprintf(buf, "%s\n", "OK");
+				return sprintf(buf, "OK\n");
 			}
 		} else {
 			err(" NG, crc check fail");
-			return sprintf(buf, "%s\n", "NG");
+			return sprintf(buf, "NG\n");
 		}
 	} else {
 		err(" NG, fw ver crc check fail");
-		return sprintf(buf, "%s\n", "NG");
+		return sprintf(buf, "NG\n");
 	}
 }
 
@@ -3199,7 +3204,7 @@ static ssize_t camera_rear4_checkfw_factory_show(struct device *dev,
 
 	if (!fimc_is_sec_check_rom_ver(sysfs_core, position)) {
 		err(" NG, invalid ROM version");
-		return sprintf(buf, "%s\n", "NG_VER");
+		return sprintf(buf, "NG_VER\n");
 	}
 
 	if (crc32_check_list[position][CRC32_CHECK_FW_VER]) {
@@ -3263,7 +3268,6 @@ static ssize_t camera_rear4_dualcal_show(struct device *dev,
 	dual_cal_data2_addr = specific->rom_cal_map_addr[position]->rom_dual_cal_data2_start_addr;
 	dual_cal_data2_size = specific->rom_cal_map_addr[position]->rom_dual_cal_data2_size;
 
-
 	if (dual_cal_data2_addr > 0 && dual_cal_data2_size > 0) {
 		memcpy(buf, &cal_buf[dual_cal_data2_addr], dual_cal_data2_size);
 	  	return dual_cal_data2_size;
@@ -3304,8 +3308,8 @@ static DEVICE_ATTR(rear4_checkfw_factory, S_IRUGO, camera_rear4_checkfw_factory_
 static DEVICE_ATTR(rear4_sensorid_exif,   S_IRUGO, camera_rear4_sensorid_exif_show,   NULL);
 static DEVICE_ATTR(rear4_mtf_exif,        S_IRUGO, camera_rear4_mtf_exif_show,        NULL);
 #if defined(REAR_SUB_CAMERA)
-static DEVICE_ATTR(rear4_dualcal,         S_IRUGO, camera_rear4_dualcal_show,          NULL);
-static DEVICE_ATTR(rear4_dualcal_size,    S_IRUGO, camera_rear4_dualcal_size_show,     NULL);
+static DEVICE_ATTR(rear4_dualcal,         S_IRUGO, camera_rear4_dualcal_show,         NULL);
+static DEVICE_ATTR(rear4_dualcal_size,    S_IRUGO, camera_rear4_dualcal_size_show,    NULL);
 static DEVICE_ATTR(rear4_tilt,            S_IRUGO, camera_rear4_tilt_show,            NULL);
 #endif
 #ifndef USE_SHARED_ROM_REAR4
@@ -3347,11 +3351,13 @@ static ssize_t rear_camera_hw_param_show(struct device *dev,
 			finfo[position]->rom_module_id[2], finfo[position]->rom_module_id[3],
 			finfo[position]->rom_module_id[4], finfo[position]->rom_module_id[7],
 			finfo[position]->rom_module_id[8], finfo[position]->rom_module_id[9],
-			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt,
+			ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
 	} else {
 		return sprintf(buf, "\"CAMIR_ID\":\"MIR_ERR\",\"I2CR_AF\":\"%d\",\"I2CR_COM\":\"%d\","
 			"\"I2CR_SEN\":\"%d\",\"MIPIR_COM\":\"%d\",\"MIPIR_SEN\":\"%d\"\n",
-			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt,
+			ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
 	}
 }
 
@@ -3389,11 +3395,13 @@ static ssize_t front_camera_hw_param_show(struct device *dev,
 			finfo[position]->rom_module_id[2], finfo[position]->rom_module_id[3],
 			finfo[position]->rom_module_id[4], finfo[position]->rom_module_id[7],
 			finfo[position]->rom_module_id[8], finfo[position]->rom_module_id[9],
-			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt,
+			ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
 	} else {
 		return sprintf(buf, "\"CAMIF_ID\":\"MIR_ERR\",\"I2CF_AF\":\"%d\",\"I2CF_COM\":\"%d\","
 			"\"I2CF_SEN\":\"%d\",\"MIPIF_COM\":\"%d\",\"MIPIF_SEN\":\"%d\"\n",
-			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt, ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
+			ec_param->i2c_af_err_cnt, ec_param->i2c_comp_err_cnt, ec_param->i2c_sensor_err_cnt,
+			ec_param->mipi_comp_err_cnt, ec_param->mipi_sensor_err_cnt);
 	}
 }
 

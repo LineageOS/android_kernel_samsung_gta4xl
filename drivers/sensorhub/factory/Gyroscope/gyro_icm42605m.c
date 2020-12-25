@@ -308,6 +308,25 @@ ssize_t get_gyro_icm42605m_selftest(struct ssp_data *data, char *buf)
 	gyro_self_ratio[1] = shift_ratio[1];
 	gyro_self_ratio[2] = shift_ratio[2];
 
+    /* TDK : selftest zro check */
+    if(ABS(gyro_self_zro[0]) <= DEF_GYRO_MAX_DPS_TDK && ABS(gyro_self_zro[1]) <= DEF_GYRO_MAX_DPS_TDK
+        && ABS(gyro_self_zro[2]) <= DEF_GYRO_MAX_DPS_TDK) {
+        zro_result = 1;
+    } else {
+        ssp_dbg("[SSP]: %s - Self zro test fail");
+        zro_result = 0;
+    }
+
+    /* TDK : selftest selftest ratio check */
+    if(gyro_self_ratio[0] > DEF_GYRO_SELF_MIN_RATIO_TDK && gyro_self_ratio[1] > DEF_GYRO_SELF_MIN_RATIO_TDK
+        && gyro_self_ratio[2] > DEF_GYRO_SELF_MIN_RATIO_TDK) {
+        ratio_result = 1;
+    } else {
+        ssp_dbg("[SSP]: %s - Ratio test fail");
+        ratio_result = 0;
+    }
+
+    /*  TDK : Fifo test check */
 	if (total_count != 128) {
 		pr_err("[SSP] %s, total_count is not 128. goto exit\n",
 		       __func__);
@@ -347,24 +366,6 @@ ssize_t get_gyro_icm42605m_selftest(struct ssp_data *data, char *buf)
 		}
 	}
 #endif
-
-    /* TDK : selftest zro check */
-    if(ABS(gyro_self_zro[0]) <= DEF_GYRO_MAX_DPS_TDK && ABS(gyro_self_zro[1]) <= DEF_GYRO_MAX_DPS_TDK 
-        && ABS(gyro_self_zro[2]) <= DEF_GYRO_MAX_DPS_TDK) {
-        zro_result = 1;
-    } else {
-        ssp_dbg("[SSP]: %s - Zro test fail");
-        zro_result = 0;
-    }
-
-    /* TDK : selftest selftest ratio check */
-    if(gyro_self_ratio[0] > DEF_GYRO_SELF_MIN_RATIO_TDK && gyro_self_ratio[1] > DEF_GYRO_SELF_MIN_RATIO_TDK 
-        && gyro_self_ratio[2] > DEF_GYRO_SELF_MIN_RATIO_TDK) {
-        ratio_result = 1;
-    } else {
-        ssp_dbg("[SSP]: %s - Ratio test fail");
-        ratio_result = 0;
-    }
 
 	/* AVG value range test +/- 10 */
 	if ((ABS(gyro_fifo_avg[0]) > 10) || (ABS(gyro_fifo_avg[1]) > 10) ||
@@ -459,16 +460,17 @@ ssize_t get_gyro_icm42605m_selftest(struct ssp_data *data, char *buf)
 		data->gyrocal.z = 0;
 	}
 exit:
-	ssp_dbg("[SSP]: %s - "
-	        "%d,%d,%d,"
-	        "%d,%d,%d,"
-	        "%d,%d,%d,"
-	        "%d,%d,%d,%d,%d\n",
+	ssp_info("[SSP]: %s - "
+	        "fifo_avg : %d,%d,%d,"
+	        "self_zro : %d,%d,%d,"
+	        "self_bias : %d,%d,%d,"
+	        "self_ratio : %d,%d,%d,"
+	        "ratio res : %d, zro res : %d\n",
 	        __func__,
 	        gyro_fifo_avg[0], gyro_fifo_avg[1], gyro_fifo_avg[2],
 	        gyro_self_zro[0], gyro_self_zro[1], gyro_self_zro[2],
 	        gyro_self_bias[0], gyro_self_bias[1], gyro_self_bias[2],
-	        gyro_self_diff[0], gyro_self_diff[1], gyro_self_diff[2],
+	        gyro_self_ratio[0], gyro_self_ratio[1], gyro_self_ratio[2],
 	        ratio_result,
 	        zro_result);
 

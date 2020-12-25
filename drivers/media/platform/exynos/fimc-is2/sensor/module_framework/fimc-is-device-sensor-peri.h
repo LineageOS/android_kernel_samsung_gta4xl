@@ -86,6 +86,7 @@ struct fimc_is_cis {
 	/* Long Term Exposure Mode(LTE mode) structure */
 	struct fimc_is_long_term_expo_mode	long_term_mode;
 	struct work_struct			long_term_mode_work;
+	bool lte_work_enable;
 
 	/* sensor control delay(N+1 or N+2) */
 	u32				ctrl_delay;
@@ -197,6 +198,7 @@ struct fimc_is_flash_data {
 	struct work_struct		flash_fire_work;
 	struct timer_list		flash_expire_timer;
 	struct work_struct		flash_expire_work;
+	struct work_struct		muic_ctrl_and_flash_fire_work;
 };
 
 struct fimc_is_flash {

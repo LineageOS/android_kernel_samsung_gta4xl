@@ -574,13 +574,14 @@ struct slsi_vif_sta {
 	u8                      regd_mc_addr_count;
 	u8                      regd_mc_addr[SLSI_MC_ADDR_ENTRY_MAX][ETH_ALEN];
 	bool                    group_key_set;
+	bool			wep_key_set;
 	struct sk_buff          *mlme_scan_ind_skb;
 	bool                    roam_in_progress;
 	int                     tdls_peer_sta_records;
 	bool                    tdls_enabled;
 	struct cfg80211_bss     *sta_bss;
 	u8                      *assoc_req_add_info_elem;
-	u8                      assoc_req_add_info_elem_len;
+	int                      assoc_req_add_info_elem_len;
 
 	/* List of seen ESS and Freq associated with them */
 	struct list_head        network_map;
@@ -598,6 +599,9 @@ struct slsi_vif_sta {
 	atomic_t                drop_roamed_ind;
 	u8                      *vendor_disconnect_ies;
 	int                     vendor_disconnect_ies_len;
+	u8                      bssid[ETH_ALEN];
+	u8                      ssid[IEEE80211_MAX_SSID_LEN];
+	u8                      ssid_len;
 #ifdef CONFIG_SCSC_WLAN_SAE_CONFIG
 	u8                      *rsn_ie;
 	u8                      rsn_ie_len;
@@ -766,7 +770,7 @@ struct netdev_vif {
 	atomic_t                    is_registered;         /* Has the net dev been registered */
 	bool                        is_available;          /* Has the net dev been opened AND is usable */
 	bool                        is_fw_test;            /* Is the device in use as a test device via UDI */
-#ifdef CONFIG_SLSI_WLAN_STA_FWD_BEACON
+#if defined(CONFIG_SLSI_WLAN_STA_FWD_BEACON) && (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 100000)
 	bool                        is_wips_running;
 #endif
 	/* Structure can be accessed by cfg80211 ops, procfs/ioctls and as a result
@@ -903,6 +907,11 @@ struct slsi_wes_mode_roam_scan_channels {
 struct slsi_wes_mode_roam_scan_channels_legacy {
 	int n;
 	u8  channels[SLSI_MAX_CHANNEL_LIST];
+};
+
+struct slsi_ioctl_args {
+	int arg_count;
+	u8  *args[];
 };
 
 struct slsi_dev_config {
@@ -1243,8 +1252,11 @@ struct slsi_dev {
 	bool                       enhanced_pkt_filter_enabled;
 #endif
 	struct reg_database regdb;
+	u8 forced_bandwidth;
 	bool require_service_close;
 	bool                       mac_changed;
+	u8                         fw_ext_cap_ie[9]; /*extended capability IE length is 9 */
+	u32                        fw_ext_cap_ie_len;
 };
 
 /* Compact representation of channels a ESS has been seen on

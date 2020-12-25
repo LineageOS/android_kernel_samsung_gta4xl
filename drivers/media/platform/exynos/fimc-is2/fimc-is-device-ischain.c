@@ -1490,6 +1490,8 @@ static int fimc_is_itf_open(struct fimc_is_device_ischain *device,
 	offset_path = (sizeof(struct sensor_open_extended) / 4) + 1;
 	memcpy(&region->shared[offset_path], path, sizeof(struct fimc_is_path_info));
 
+	memset(&region->fd_info, 0x0, sizeof(struct nfd_info));
+
 	fimc_is_ischain_region_flush(device);
 
 	ret = fimc_is_itf_open_wrap(device,
@@ -2591,21 +2593,39 @@ int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 {
 	int ret = 0;
 	struct param_sensor_config *sensor_config;
+	struct fimc_is_module_enum *module;
 	u32 binning, bns_binning;
 	u32 sensor_width, sensor_height;
 	u32 bns_width, bns_height;
 	u32 framerate;
 	enum fimc_is_ex_mode ex_mode;
+	u32 mono_mode = 0;
 
 	FIMC_BUG(!device->sensor);
 
+	ret = fimc_is_sensor_g_module(device->sensor, &module);
+	if (ret) {
+		merr("is_sensor_g_module is fail(%d)", device, ret);
+		goto p_sensor_config;
+	}
+
+	if (!module->pdata) {
+		merr("module pdata is NULL", device);
+		goto p_sensor_config;
+	}
+
+	if (module->pdata->sensor_module_type == SENSOR_TYPE_MONO)
+		mono_mode = 1;
+	minfo("mono sensor enable(%d)\n", device, mono_mode);
+
+p_sensor_config:
 	sensor_width = fimc_is_sensor_g_width(device->sensor);
 	sensor_height = fimc_is_sensor_g_height(device->sensor);
 	bns_width = fimc_is_sensor_g_bns_width(device->sensor);
 	bns_height = fimc_is_sensor_g_bns_height(device->sensor);
 	framerate = fimc_is_sensor_g_framerate(device->sensor);
 	ex_mode = fimc_is_sensor_g_ex_mode(device->sensor);
-	if(ex_mode == EX_CROP_ZOOM)
+	if (ex_mode == EX_CROP_ZOOM || ex_mode == EX_LOW_RES_TETRA)
 		binning = fimc_is_sensor_g_sensorcrop_bratio(device->sensor);
 	else
 		binning = fimc_is_sensor_g_bratio(device->sensor);
@@ -2614,6 +2634,10 @@ int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 		bns_binning = 1000;
 	else
 		bns_binning = fimc_is_sensor_g_bns_ratio(device->sensor);
+
+	minfo("[ISC:D] window_width(%d), window_height(%d), otf_width(%d), otf_height(%d)\n", device,
+		device->sensor->image.window.width, device->sensor->image.window.height,
+		device->sensor->image.window.otf_width, device->sensor->image.window.otf_height);
 
 	sensor_config = fimc_is_itf_g_param(device, frame, PARAM_SENSOR_CONFIG);
 	sensor_config->width = sensor_width;
@@ -2643,6 +2667,10 @@ int fimc_is_ischain_s_sensor_size(struct fimc_is_device_ischain *device,
 		sensor_config->early_config_lock = 1;
 	else
 		sensor_config->early_config_lock = 0;
+
+#ifdef USE_MONO_SENSOR
+	sensor_config->mono_mode = mono_mode;
+#endif
 
 	*lindex |= LOWBIT_OF(PARAM_SENSOR_CONFIG);
 	*hindex |= HIGHBIT_OF(PARAM_SENSOR_CONFIG);

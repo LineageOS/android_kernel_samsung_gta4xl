@@ -1297,18 +1297,23 @@ static int vnet_xmit(struct sk_buff *skb, struct net_device *ndev)
 					"(tx_bytes:%d len:%d)\n",
 					iod->name, mc->name, ld->name, ret,
 					tx_bytes, count);
+			goto drop;
 		}
-		goto drop;
+		goto retry;
 	}
 
 	if (ret != tx_bytes) {
+		ndev->stats.tx_errors++;		/* packet transmit problems */
+		ndev->stats.tx_bytes += ret;
 		mif_info("%s->%s: WARN! %s->send ret:%d (tx_bytes:%d len:%d)\n",
 			iod->name, mc->name, ld->name, ret, tx_bytes, count);
 	}
-
-	ndev->stats.tx_packets++;
-	ndev->stats.tx_bytes += count;
-
+	else 
+	{
+		ndev->stats.tx_packets++;
+		ndev->stats.tx_bytes += count;
+	}
+	
 	/*
 	If @skb has been expanded to $skb_new, @skb must be freed here.
 	($skb_new will be freed by the link device.)

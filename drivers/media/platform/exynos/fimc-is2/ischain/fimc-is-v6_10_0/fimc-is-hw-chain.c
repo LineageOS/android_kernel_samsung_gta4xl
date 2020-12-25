@@ -1478,7 +1478,9 @@ int fimc_is_hw_overflow_recovery(void)
 	struct fimc_is_framemgr *framemgr;
 	struct fimc_is_groupmgr *groupmgr;
 	u32 backup_frame_numbuffers = 0;
+#ifdef USE_ISP_OTF_INPUT_PATH
 	u32 recov_fcount = 0;
+#endif
 
 	struct fimc_is_device_sensor *sensor;
 	struct fimc_is_module_enum *module;
@@ -1503,7 +1505,7 @@ int fimc_is_hw_overflow_recovery(void)
 	WARN_ON(!module);
 	sensor_peri = (struct fimc_is_device_sensor_peri *)module->private_data;
 	WARN_ON(!sensor_peri);
-	subdev_paf = sensor_peri->subdev_paf;
+	subdev_paf = sensor_peri->subdev_pafstat;
 
 	groupmgr = device->groupmgr;
 	group = groupmgr->group[instance][GROUP_SLOT_3AA];
@@ -1535,6 +1537,7 @@ int fimc_is_hw_overflow_recovery(void)
 		goto exit;
 	}
 
+#ifdef USE_ISP_OTF_INPUT_PATH
 	/* 3. BLK_ISP LHM_ATB_GLUE sw reset */
 	writel(0x0, isp_lhm_atb_glue_rst);
 	writel(0x100, isp_lhm_atb_glue_rst);
@@ -1586,6 +1589,7 @@ int fimc_is_hw_overflow_recovery(void)
 		merr("Hardware recovery shot fail = %x", device, ret);
 		goto exit;
 	}
+#endif
 
 	/* 7. PAFSTAT sfr restore */
 	ret = fimc_is_pafstat_reset_recovery(subdev_paf, 1, PD_MOD2);

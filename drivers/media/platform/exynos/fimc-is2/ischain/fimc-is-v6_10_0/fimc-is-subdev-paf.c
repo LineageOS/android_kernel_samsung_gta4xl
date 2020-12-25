@@ -29,7 +29,11 @@ void fimc_is_ischain_paf_stripe_cfg(struct fimc_is_subdev *subdev,
 	/* Input crop & RDMA offset configuration */
 	if (!frame->stripe_info.region_id) {
 		/* Left region */
+#ifdef STRIPE_MARGIN_WIDTH_1024
+		stripe_w = ALIGN_DOWN(incrop->w / frame->stripe_info.region_num, STRIPE_WIDTH_ALIGN);
+#else
 		stripe_w = ALIGN(incrop->w / frame->stripe_info.region_num, STRIPE_WIDTH_ALIGN);
+#endif
 
 		frame->stripe_info.in.h_pix_ratio = stripe_w * STRIPE_RATIO_PRECISION / incrop->w;
 		frame->stripe_info.in.h_pix_num = stripe_w;

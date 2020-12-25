@@ -361,6 +361,8 @@ struct ssp_data {
 	u32 light_position[6];
 	int brightness;
 	int last_brightness_level;
+	int brightness_array_len;
+	u32 *brightness_array;
 	bool camera_lux_en;
 	int camera_lux;
 	int camera_lux_hysteresis[2];

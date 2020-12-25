@@ -156,16 +156,16 @@ static u8 __get_off_time_offset(u32 ms)
 
 static void color_led_set_mode(struct sm5713_rgb_data *rgb, u8 index, u8 mode)
 {
-    u8 offset = 4 + index;
+	u8 offset = 4 + index;
 
-    sm5713_update_reg(rgb->i2c, SM5713_CHG_REG_LED123MODE, (mode << offset), (0x1 << offset));
+	sm5713_update_reg(rgb->i2c, SM5713_CHG_REG_LED123MODE, (mode << offset), (0x1 << offset));
 }
 
 static void color_led_set_enable(struct sm5713_rgb_data *rgb, u8 index, bool enable)
 {
-    u8 offset = 0 + index;
+	u8 offset = 0 + index;
 
-    sm5713_update_reg(rgb->i2c, SM5713_CHG_REG_LED123MODE, (enable << offset), (enable << offset));
+	sm5713_update_reg(rgb->i2c, SM5713_CHG_REG_LED123MODE, (enable << offset), (enable << offset));
 }
 
 static void color_led_do_reset(struct sm5713_rgb_data *rgb)
@@ -181,6 +181,25 @@ static void color_led_set_brightness(struct sm5713_rgb_data *rgb, u8 index, u8 b
 		dev_info(rgb->dev, "%s: index(%d) brightness(0mA))\n", __func__, index);
 	sm5713_write_reg(rgb->i2c, SM5713_CHG_REG_LED1CNTL1 + (index * 3), brightness);
 }
+
+#if defined(CONFIG_LEDS_SM5713_RGB_WORKAROUND)
+static void color_led_set_high_brightness(struct sm5713_rgb_data *rgb, u8 index, u8 brightness)
+{
+	u8 br_temp = 100; /* 10.0mA */
+	unsigned long br_udelay = 1000; /* 1ms */
+
+	if (brightness == 0)
+		return;
+
+	dev_info(rgb->dev, "%s: index(%d) brightness(%d.%dmA))\n", __func__, index, br_temp/10, br_temp%10);
+	sm5713_write_reg(rgb->i2c, SM5713_CHG_REG_LED1CNTL1 + (index * 3), br_temp);
+
+	usleep_range(br_udelay, br_udelay + 10);
+
+	dev_info(rgb->dev, "%s: index(%d) brightness(%d.%dmA))\n", __func__, index, brightness/10, brightness%10);
+	sm5713_write_reg(rgb->i2c, SM5713_CHG_REG_LED1CNTL1 + (index * 3), brightness);
+}
+#endif
 
 static void color_led_set_dimm_ctrl(struct sm5713_rgb_data *rgb, u8 index, u8 ramp_up, u8 ramp_down, u8 on_time, u8 off_time)
 {
@@ -227,6 +246,9 @@ static ssize_t store_led_r(struct device *dev, struct device_attribute *devattr,
 	color_led_set_brightness(rgb, rgb->pdata.index_r, brightness);
 	color_led_set_mode(rgb, rgb->pdata.index_r, CLED_MODE_ALWAYS);
 	color_led_set_enable(rgb, rgb->pdata.index_r, (brightness > 0 ? 1 : 0));
+#if defined(CONFIG_LEDS_SM5713_RGB_WORKAROUND)
+	color_led_set_high_brightness(rgb, rgb->pdata.index_r, brightness);
+#endif
 
 	dev_dbg(dev, "%s: curr=0x%x, mode=always LED-%s\n", __func__, brightness, (brightness) ? "ON" : "OFF");
 
@@ -382,6 +404,9 @@ static ssize_t store_led_blink(struct device *dev, struct device_attribute *deva
 			color_led_set_dimm_ctrl(rgb, rgb->pdata.index_r, 0, 0, t_on, t_off);
 		}
 		color_led_set_enable(rgb, rgb->pdata.index_r, 1);
+#if defined(CONFIG_LEDS_SM5713_RGB_WORKAROUND)
+		color_led_set_high_brightness(rgb, rgb->pdata.index_r, br_curr);
+#endif
 	}
 
 	if (led_g) {
@@ -432,6 +457,9 @@ static ssize_t store_led_pattern(struct device *dev, struct device_attribute *de
 		br_curr = rgb->brightness * rgb->ratio_r / 100;
 		color_led_set_brightness(rgb, rgb->pdata.index_r, br_curr);
 		color_led_set_enable(rgb, rgb->pdata.index_r, 1);
+#if defined(CONFIG_LEDS_SM5713_RGB_WORKAROUND)
+		color_led_set_high_brightness(rgb, rgb->pdata.index_r, br_curr);
+#endif
 		break;
 	case CHARGING_ERR:
 		/* LED_R slope mode ON (500ms to 500ms) */
@@ -440,6 +468,9 @@ static ssize_t store_led_pattern(struct device *dev, struct device_attribute *de
 		color_led_set_mode(rgb, rgb->pdata.index_r, CLED_MODE_DIMM);
 		color_led_set_dimm_ctrl(rgb, rgb->pdata.index_r, 0, 0, 0x3, 0x2);
 		color_led_set_enable(rgb, rgb->pdata.index_r, 1);
+#if defined(CONFIG_LEDS_SM5713_RGB_WORKAROUND)
+		color_led_set_high_brightness(rgb, rgb->pdata.index_r, br_curr);
+#endif
 		break;
 	case MISSED_NOTI:
 		/* LED_B slope mode ON (500ms to 5000ms) */
@@ -456,6 +487,9 @@ static ssize_t store_led_pattern(struct device *dev, struct device_attribute *de
 		color_led_set_mode(rgb, rgb->pdata.index_r, CLED_MODE_DIMM);
 		color_led_set_dimm_ctrl(rgb, rgb->pdata.index_r, 0, 0, 0x3, 0xc);
 		color_led_set_enable(rgb, rgb->pdata.index_r, 1);
+#if defined(CONFIG_LEDS_SM5713_RGB_WORKAROUND)
+		color_led_set_high_brightness(rgb, rgb->pdata.index_r, br_curr);
+#endif
 		break;
 	case FULLY_CHARGED:
 		/* LED_G constant mode ON */

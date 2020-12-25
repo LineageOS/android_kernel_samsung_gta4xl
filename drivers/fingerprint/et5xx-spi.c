@@ -183,6 +183,59 @@ static void etspi_reset(struct etspi_data *etspi)
 	etspi->reset_count++;
 }
 
+static void etspi_power_set(struct etspi_data *etspi, int status)
+{
+	int rc = 0;
+	if (etspi->ldo_pin) {
+		pr_info("%s ldo\n", __func__);
+		if (status == 1) {
+			if (etspi->ldo_pin) {
+				gpio_set_value(etspi->ldo_pin, 1);
+				etspi->ldo_enabled = 1;
+			}
+		} else if (status == 0) {
+			if (etspi->ldo_pin) {
+				gpio_set_value(etspi->ldo_pin, 0);
+				etspi->ldo_enabled = 0;
+			}
+		} else {
+			pr_err("%s can't support this value. %d\n"
+				, __func__, status);
+		}
+	} else if (etspi->regulator_3p3 != NULL) {
+		pr_info("%s regulator, status %d\n", __func__, status);
+		if (status == 1) {
+			if (regulator_is_enabled(etspi->regulator_3p3) == 0) {
+				rc = regulator_enable(etspi->regulator_3p3);
+				if (rc)
+					pr_err("%s regulator enable failed, rc=%d\n"
+					, __func__ , rc);
+				else
+					etspi->ldo_enabled = 1;
+			} else
+				pr_info("%s regulator is already enabled\n"
+					, __func__);
+		} else if (status == 0) {
+			if (regulator_is_enabled(etspi->regulator_3p3)) {
+				rc = regulator_disable(etspi->regulator_3p3);
+				if (rc)
+					pr_err("%s regulator disable failed, rc=%d\n"
+						, __func__, rc);
+				else
+					etspi->ldo_enabled = 0;
+			} else
+				pr_info("%s regulator is already disabled\n"
+					, __func__);
+		} else {
+			pr_err("%s can't support this value. %d\n"
+				, __func__, status);
+		}
+	} else {
+		pr_info("%s This HW revision does not support a power control\n"
+			, __func__);
+	}
+}
+
 static void etspi_pin_control(struct etspi_data *etspi,
 	bool pin_set)
 {
@@ -214,11 +267,8 @@ static void etspi_power_control(struct etspi_data *etspi, int status)
 {
 	pr_info("%s status = %d\n", __func__, status);
 	if (status == 1) {
+		etspi_power_set(etspi, 1);
 		etspi_pin_control(etspi, 1);
-		if (etspi->ldo_pin) {
-			gpio_set_value(etspi->ldo_pin, 1);
-			etspi->ldo_enabled = 1;
-		}
 		usleep_range(1100, 1150);
 		if (etspi->sleepPin)
 			gpio_set_value(etspi->sleepPin, 1);
@@ -232,11 +282,7 @@ static void etspi_power_control(struct etspi_data *etspi, int status)
 #endif
 		if (etspi->sleepPin)
 			gpio_set_value(etspi->sleepPin, 0);
-		if (etspi->ldo_pin) {
-			gpio_set_value(etspi->ldo_pin, 0);
-			etspi->ldo_enabled = 0;
-		}
-
+		etspi_power_set(etspi, 0);
 		etspi_pin_control(etspi, 0);
 	} else {
 		pr_err("%s can't support this value. %d\n", __func__, status);
@@ -1139,6 +1185,20 @@ static int etspi_parse_dt(struct device *dev,
 			__func__, data->ldo_pin);
 	}
 
+	if (of_property_read_string(np, "etspi-regulator", &data->btp_vdd) < 0) {
+		pr_info("%s: not use btp_regulator\n", __func__);
+		data->btp_vdd = NULL;
+	} else {
+		data->regulator_3p3 = regulator_get(NULL, data->btp_vdd);
+		if (IS_ERR(data->regulator_3p3) ||
+				(data->regulator_3p3) == NULL) {
+			pr_info("%s: not use regulator_3p3\n", __func__);
+			data->regulator_3p3 = NULL;
+		} else {
+			pr_info("%s: btp_regulator ok\n", __func__);
+		}
+	}
+
 	if (of_property_read_string_index(np, "etspi-chipid", 0,
 			(const char **)&data->chipid)) {
 		data->chipid = NULL;
@@ -1378,14 +1438,9 @@ static struct device_attribute *fp_attrs[] = {
 
 static void etspi_work_func_debug(struct work_struct *work)
 {
-	u8 ldo_value = 0;
-
-	if (g_data->ldo_pin)
-		ldo_value = gpio_get_value(g_data->ldo_pin);
-
 	pr_info("%s ldo: %d, sleep: %d, tz: %d, spi_value: 0x%x, type: %s\n",
 		__func__,
-		ldo_value, gpio_get_value(g_data->sleepPin),
+		g_data->ldo_enabled, gpio_get_value(g_data->sleepPin),
 		g_data->tz_mode, g_data->spi_value,
 		sensor_status[g_data->sensortype + 2]);
 }

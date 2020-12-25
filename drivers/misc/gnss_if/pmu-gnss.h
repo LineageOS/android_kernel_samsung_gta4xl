@@ -24,6 +24,11 @@
 #define EXYNOS_PMU_GNSS2AP_PERI_ACCESS_WIN1	0x727C
 #define EXYNOS_PMU_GNSS_BOOT_TEST_RST_CONFIG	0x7290
 
+/* Ramen only? */
+#define EXYNOS_PMU_SHARED_PWR_REQ_GNSS_CONTROL	0x800C
+#define EXYNOS_PMU_SHARED_TCXO_REQ_GNSS_CONTROL	0x801C
+#define EXYNOS_PMU_SHARED_MIF_REQ_GNSS_CONTROL	0x802C
+
 #define EXYNOS_PMU_CENTRAL_SEQ_GNSS_CONFIGURATION	0x02C0
 #define EXYNOS_PMU_RESET_AHEAD_GNSS_SYS_PWR_REG	0x1340
 #define EXYNOS_PMU_CLEANY_BUS_SYS_PWR_REG	0x1344
@@ -94,6 +99,7 @@ struct gnssctl_pmu_ops {
 	int (*init_conf)(struct gnss_ctl *);
 	int (*hold_reset)(void);
 	int (*release_reset)(void);
+	void (*check_status)(void);
 	int (*power_on)(enum gnss_mode);
 	int (*clear_int)(enum gnss_int_clear);
 	int (*change_tcxo_mode)(enum gnss_tcxo_mode);

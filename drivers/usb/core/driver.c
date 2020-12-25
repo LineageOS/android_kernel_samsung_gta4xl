@@ -1408,6 +1408,9 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 
 	if (udev->state == USB_STATE_NOTATTACHED) {
 		status = -ENODEV;
+#if defined(CONFIG_USB_DEBUG_DETAILED_LOG)
+		dev_err(&udev->dev, "%s: udev->state is NOTATTACHED\n", __func__);
+#endif
 		goto done;
 	}
 	udev->can_submit = 1;
@@ -1424,10 +1427,15 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 					udev->reset_resume);
 		}
 	}
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	if (!udev)
+		goto done;
+#endif
 	usb_mark_last_busy(udev);
-
- done:
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
 	dev_vdbg(&udev->dev, "%s: status %d\n", __func__, status);
+#endif
+ done:
 	if (!status)
 		udev->reset_resume = 0;
 	return status;

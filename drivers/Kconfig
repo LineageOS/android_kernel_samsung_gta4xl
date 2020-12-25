@@ -216,6 +216,8 @@ source "drivers/bts/Kconfig"
 
 source "drivers/gud/Kconfig"
 
+source "drivers/battery/Kconfig"
+
 source "drivers/battery_v2/Kconfig"
 
 source "drivers/switch/Kconfig"
@@ -232,4 +234,5 @@ source "drivers/vibrator/Kconfig"
 
 source "drivers/fingerprint/Kconfig"
 
+source "drivers/spu_verify/Kconfig"
 endmenu

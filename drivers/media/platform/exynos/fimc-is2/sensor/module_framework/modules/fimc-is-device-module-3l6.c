@@ -39,6 +39,7 @@
 #include "fimc-is-dt.h"
 
 #include "fimc-is-device-module-base.h"
+#include "fimc-is-device-module-3l6.h"
 
 #ifndef USE_VENDOR_PWR_PIN_NAME
 #define RCAM_AF_VDD      "vdd_ldo37"       /* RCAM1_AFVDD_2P8 */
@@ -47,6 +48,46 @@
 #define S5K3L6_DVDD      "CAM_VLDO2"       /* RCAM1_DVDD_1P05 */
 #endif
 
+struct pin_info {
+	int gpio; /* gpio_none or gpio name */
+	int type; /* PIN_OUTPUT, PIN_REGULATOR */
+};
+
+#ifdef USE_3L6B_SETFILE
+/*
+ * [Mode Information]
+ *
+ * Reference File : 3L6_EVT1_12M_Ver_0.4.xlsx
+*/
+static struct fimc_is_sensor_cfg config_module_3l6[] = {
+	/* width, height, fps, settle, mode, lane, speed, interleave, pd_mode */
+	FIMC_IS_SENSOR_CFG(4000, 3000, 30, 0, 0, CSI_DATA_LANES_4, 1196, CSI_MODE_VC_ONLY, PD_NONE,
+		VC_IN(0, HW_FORMAT_RAW10, 4000, 3000), VC_OUT(HW_FORMAT_RAW10, VC_NOTHING, 0, 0),
+		VC_IN(1, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(2, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(3, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0)),
+	FIMC_IS_SENSOR_CFG(4000, 2256, 30, 0, 1, CSI_DATA_LANES_4, 1196, CSI_MODE_VC_ONLY, PD_NONE,
+		VC_IN(0, HW_FORMAT_RAW10, 4000, 2256), VC_OUT(HW_FORMAT_RAW10, VC_NOTHING, 0, 0),
+		VC_IN(1, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(2, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(3, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0)),
+	FIMC_IS_SENSOR_CFG(2000, 1500, 30, 0, 2, CSI_DATA_LANES_4, 1196, CSI_MODE_VC_ONLY, PD_NONE,
+		VC_IN(0, HW_FORMAT_RAW10, 2000, 1500), VC_OUT(HW_FORMAT_RAW10, VC_NOTHING, 0, 0),
+		VC_IN(1, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(2, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(3, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0)),
+	FIMC_IS_SENSOR_CFG(2000, 1124, 30, 0, 3, CSI_DATA_LANES_4, 1196, CSI_MODE_VC_ONLY, PD_NONE,
+		VC_IN(0, HW_FORMAT_RAW10, 2000, 1124), VC_OUT(HW_FORMAT_RAW10, VC_NOTHING, 0, 0),
+		VC_IN(1, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(2, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(3, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0)),
+	FIMC_IS_SENSOR_CFG(992, 744, 120, 0, 4, CSI_DATA_LANES_4, 1196, CSI_MODE_VC_ONLY, PD_NONE,
+		VC_IN(0, HW_FORMAT_RAW10, 992, 744), VC_OUT(HW_FORMAT_RAW10, VC_NOTHING, 0, 0),
+		VC_IN(1, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(2, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
+		VC_IN(3, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0)),
+};
+#else
 /*
  * [Mode Information]
  *
@@ -91,6 +132,7 @@ static struct fimc_is_sensor_cfg config_module_3l6[] = {
 		VC_IN(2, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0),
 		VC_IN(3, HW_FORMAT_UNKNOWN, 0, 0), VC_OUT(HW_FORMAT_UNKNOWN, VC_NOTHING, 0, 0)),
 };
+#endif
 
 static const struct v4l2_subdev_core_ops core_ops = {
 	.init = sensor_module_init,
@@ -125,8 +167,11 @@ static int sensor_module_3l6_power_setpin(struct device *dev,
 	struct device_node *dnode;
 	int gpio_reset = 0;
 	int gpio_none = 0;
+	int gpio_ldo_en = 0;
 	bool shared_mclk = false;
-	
+	bool exist_actuator = false;
+	struct pin_info pin_avdd;
+
 	FIMC_BUG(!dev);
 
 	dnode = dev->of_node;
@@ -139,6 +184,12 @@ static int sensor_module_3l6_power_setpin(struct device *dev,
 
 	dev_info(dev, "%s E v4\n", __func__);
 
+	if (pdata->af_product_name != ACTUATOR_NAME_NOTHING) {
+		exist_actuator = true;
+	} else {
+		dev_info(dev, "%s : This is module without actuator\n", __func__);
+	}
+
 	gpio_reset = of_get_named_gpio(dnode, "gpio_reset", 0);
 	if (!gpio_is_valid(gpio_reset)) {
 		dev_err(dev, "failed to get PIN_RESET\n");
@@ -147,7 +198,19 @@ static int sensor_module_3l6_power_setpin(struct device *dev,
 		gpio_request_one(gpio_reset, GPIOF_OUT_INIT_LOW, "CAM_GPIO_OUTPUT_LOW");
 		gpio_free(gpio_reset);
 	}
-	
+
+	gpio_ldo_en = of_get_named_gpio(dnode, S5K3L6_AVDD, 0);
+	if (!gpio_is_valid(gpio_ldo_en)) {
+		dev_warn(dev, "%s is PIN_REGULATOR\n", S5K3L6_AVDD);
+		pin_avdd.gpio	= gpio_none;
+		pin_avdd.type	= PIN_REGULATOR;
+	} else {
+		gpio_request_one(gpio_ldo_en, GPIOF_OUT_INIT_LOW, "CAM_GPIO_OUTPUT_LOW");
+		gpio_free(gpio_ldo_en);
+		pin_avdd.gpio	= gpio_ldo_en;
+		pin_avdd.type	= PIN_OUTPUT;
+	}
+
 	shared_mclk = of_property_read_bool(dnode, "shared_mclk");
 
 	SET_PIN_INIT(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON);
@@ -159,9 +222,11 @@ static int sensor_module_3l6_power_setpin(struct device *dev,
 	/* Normal on */
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_reset, SENSOR_RESET_LOW,	PIN_OUTPUT,    0, 500);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_none,  S5K3L6_IOVDD,	PIN_REGULATOR, 1, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_none,  S5K3L6_AVDD,	PIN_REGULATOR, 1, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  pin_avdd.gpio,  S5K3L6_AVDD,	pin_avdd.type, 1, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_none,  S5K3L6_DVDD,      PIN_REGULATOR, 1, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_none,  RCAM_AF_VDD,	PIN_REGULATOR, 1, 500);
+	if (exist_actuator == true) {
+		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_none,  RCAM_AF_VDD,	PIN_REGULATOR, 1, 500);
+	}
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON,  gpio_none,  SENSOR_MCLK_PIN,	PIN_FUNCTION,  2, 1000);
 	if (shared_mclk) {
 		SET_PIN_SHARED(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, SRT_ACQUIRE,
@@ -179,16 +244,22 @@ static int sensor_module_3l6_power_setpin(struct device *dev,
 				&core->shared_rsc_slock[SHARED_PIN0], &core->shared_rsc_count[SHARED_PIN0], 0);
 	}
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none,  SENSOR_MCLK_PIN,	PIN_FUNCTION,  0, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none,  RCAM_AF_VDD,	PIN_REGULATOR, 0, 500);
+	if (exist_actuator == true) {
+		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none,  RCAM_AF_VDD,	PIN_REGULATOR, 0, 500);
+	}
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none,  S5K3L6_DVDD,      PIN_REGULATOR, 0, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none,  S5K3L6_AVDD,      PIN_REGULATOR, 0, 0);
+	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, pin_avdd.gpio,  S5K3L6_AVDD,	pin_avdd.type, 0, 0);
 	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, gpio_none,  S5K3L6_IOVDD,     PIN_REGULATOR, 0, 0);
 
 	/* READ_ROM - POWER ON */
-	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON,  gpio_none, RCAM_AF_VDD,	PIN_REGULATOR, 1, 0);
-	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON,  gpio_none, S5K3L6_IOVDD,	PIN_REGULATOR, 1, 0);
+	if (exist_actuator == true) {
+		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON,  gpio_none, RCAM_AF_VDD,	PIN_REGULATOR, 1, 0);
+	}
+	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON,  gpio_none, S5K3L6_IOVDD,	PIN_REGULATOR, 1, 1000);
 	/* READ_ROM - POWER OFF */
-	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, RCAM_AF_VDD,	PIN_REGULATOR, 0, 0);
+	if (exist_actuator == true) {
+		SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, RCAM_AF_VDD,	PIN_REGULATOR, 0, 0);
+	}
 	SET_PIN(pdata, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_OFF, gpio_none, S5K3L6_IOVDD,	PIN_REGULATOR, 0, 0);
 
 	dev_info(dev, "%s X v4\n", __func__);
@@ -249,8 +320,8 @@ static int __init sensor_module_3l6_probe(struct platform_device *pdev)
 	module->subdev = subdev_module;
 	module->device = pdata->id;
 	module->client = NULL;
-	module->active_width = 4208;
-	module->active_height = 3120;
+	module->active_width = S5K3L6_ACTIVE_WIDTH;
+	module->active_height = S5K3L6_ACTIVE_HEIGHT;
 	module->margin_left = 0;
 	module->margin_right = 0;
 	module->margin_top = 0;

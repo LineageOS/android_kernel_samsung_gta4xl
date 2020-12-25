@@ -120,6 +120,49 @@ static char *otprom_cal_dump_path = "dump/otprom_cal.bin";
 
 char loaded_fw[FIMC_IS_HEADER_VER_SIZE + 1] = {0, };
 
+#ifdef USE_DIFFERENT_ISP_MODULE
+bool fimc_is_sec_check_supported_isp(char isp)
+{
+	int size = 0;
+	int i = 0;
+	char isp_codes[] = {
+#ifdef USE_QUALCOMM_MODULE
+		FW_ISP_COMPANY_QUALCOMM,
+#endif
+	};
+
+	size = sizeof(isp_codes);
+	for ( i = 0; i < size; i++) {
+		if (isp == isp_codes[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+u8 fimc_is_sec_check_supported_cal_ver(char *cal_map_ver)
+{
+	int size = 0, i = 0;
+	u32 cal_ver = 0, def_ver = 0;
+	char cal_map_versions[][FIMC_IS_CAL_MAP_VER_SIZE - 1] = {
+#ifdef USE_QUALCOMM_MODULE
+		{'V', '7', '0'},
+#endif
+	};
+
+	cal_ver = cal_map_ver[0] << 16 | cal_map_ver[1] << 8 | cal_map_ver[2];
+	size = sizeof(cal_map_versions) / (sizeof(char) * (FIMC_IS_CAL_MAP_VER_SIZE - 1));
+	for ( i = 0; i < size; i++) {
+		def_ver = cal_map_versions[i][0] << 16 | cal_map_versions[i][1] << 8 | cal_map_versions[i][2];
+		if (cal_ver == def_ver) {
+			info("%s: Using different isp module",__func__);
+			return cal_map_ver[3];
+		}
+	}
+	return 0;
+}
+#endif /* USE_DIFFERENT_ISP_MODULE */
+
 /* local function */
 #ifdef VENDER_CAL_STRUCT_VER2
 static void *fimc_is_sec_search_rom_extend_data(const struct rom_extend_cal_addr *extend_data, char *name);
@@ -288,7 +331,7 @@ u8 fimc_is_sec_compare_ver(int position)
 	u32 from_ver = 0, def_ver = 0, def_ver2 = 0;
 	u8 ret = 0;
 	char ver[3] = {'V', '0', '0'};
-	char ver2[3] ={'V', 'F', '0'};
+	char ver2[3] = {'V', 'F', '0'};
 	struct fimc_is_rom_info *finfo = NULL;
 
 	if (fimc_is_sec_get_sysfs_finfo_by_position(position, &finfo)) {
@@ -351,6 +394,11 @@ bool fimc_is_sec_check_rom_ver(struct fimc_is_core *core, int position)
 	compare_version = specific->rom_cal_map_addr[rom_position]->camera_module_es_version;
 
 	from_ver = fimc_is_sec_compare_ver(position);
+#ifdef USE_DIFFERENT_ISP_MODULE
+	if (from_ver == 0 && specific->rom_data[rom_position].use_different_isp_module == true) {
+		from_ver = fimc_is_sec_check_supported_cal_ver(finfo->cal_map_ver);
+	}
+#endif /* USE_DIFFERENT_ISP_MODULE */
 
 	if ((from_ver < latest_from_ver) ||
 		(finfo->header_ver[10] < compare_version)) {
@@ -989,6 +1037,7 @@ int fimc_is_sec_rom_power_on(struct fimc_is_core *core, int position)
 	int ret = 0;
 	struct exynos_platform_fimc_is_module *module_pdata;
 	struct fimc_is_module_enum *module = NULL;
+	struct fimc_is_vender_specific *specific = core->vender.private_data;
 	int i = 0;
 
 	info("%s: Sensor position = %d\n", __func__, position);
@@ -1017,6 +1066,14 @@ int fimc_is_sec_rom_power_on(struct fimc_is_core *core, int position)
 	if (ret) {
 		err("gpio_cfg is fail(%d)", ret);
 		goto p_err;
+	}
+
+	if (specific->rom_data[position].rom_type == ROM_TYPE_OTPROM) {
+		ret = module_pdata->gpio_cfg(module, SENSOR_SCENARIO_READ_OTPROM, GPIO_SCENARIO_ON);
+		if (ret) {
+			err("gpio_cfg is fail(%d)", ret);
+			goto p_err;
+		}
 	}
 
 p_err:
@@ -1059,6 +1116,46 @@ int fimc_is_sec_rom_power_off(struct fimc_is_core *core, int position)
 	}
 
 p_err:
+	return ret;
+}
+
+int fimc_is_sec_otprom_power_off(struct fimc_is_core *core, int position)
+{
+	int ret = 0;
+	struct exynos_platform_fimc_is_module *module_pdata;
+	struct fimc_is_module_enum *module = NULL;
+	int i = 0;
+
+	info("%s: Sensor position = %d\n", __func__, position);
+
+	for (i = 0; i < FIMC_IS_SENSOR_COUNT; i++) {
+		fimc_is_search_sensor_module_with_position(&core->sensor[i], position, &module);
+		if (module)
+			break;
+	}
+
+	if (!module) {
+		err("%s: Could not find sensor id.", __func__);
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	module_pdata = module->pdata;
+
+	if (!module_pdata->gpio_cfg) {
+		err("gpio_cfg is NULL");
+		ret = -EINVAL;
+		goto p_err;
+	}
+
+	ret = module_pdata->gpio_cfg(module, SENSOR_SCENARIO_READ_OTPROM, GPIO_SCENARIO_OFF);
+	if (ret) {
+		err("gpio_cfg is fail(%d)", ret);
+		goto p_err;
+	}
+
+p_err:
+	info("%s: X\n", __func__);
 	return ret;
 }
 
@@ -2557,11 +2654,285 @@ exit:
 #endif //if 0
 #endif //!SENSOR_OTP_5E9
 
+#if defined(SENSOR_OTP_GC5035)
+int fimc_is_sec_readcal_otprom_header(char * buf, int position)
+{
+	int ret = 0;
+	int cal_size = 0;
+	char *cal_buf[2] = {NULL, NULL};
+	struct fimc_is_core *core = dev_get_drvdata(fimc_is_dev);
+	struct fimc_is_vender_specific *specific = core->vender.private_data;
+	const struct fimc_is_vender_rom_addr *rom_addr = specific->rom_cal_map_addr[position];
+	struct fimc_is_rom_info *finfo = NULL;
+	bool supported_isp_module = false;
+
+	if (!rom_addr) {
+		err("%s: otp_%d There is no cal map\n", __func__, position);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	info("%s E\n",__func__);
+
+	fimc_is_sec_get_sysfs_finfo_by_position(position, &finfo);
+	cal_size = fimc_is_sec_get_max_cal_size(core, position);
+	
+	/* HEARDER Data : Module/Manufacturer Information */
+	memcpy(finfo->header_ver, &buf[rom_addr->rom_header_main_module_info_start_addr], FIMC_IS_HEADER_VER_SIZE);
+	finfo->header_ver[FIMC_IS_HEADER_VER_SIZE] = '\0';
+	/* HEARDER Data : Cal Map Version */
+	memcpy(finfo->cal_map_ver, &buf[rom_addr->rom_header_cal_map_ver_start_addr], FIMC_IS_CAL_MAP_VER_SIZE);
+
+	info("OTPROM header version = %s\n", finfo->header_ver);
+
+	if (rom_addr->rom_header_module_id_addr > 0) {
+		memcpy(finfo->rom_module_id, &buf[rom_addr->rom_header_module_id_addr], FIMC_IS_MODULE_ID_SIZE);
+		finfo->rom_module_id[FIMC_IS_MODULE_ID_SIZE] = '\0';
+	}
+
+	if (rom_addr->rom_header_main_sensor_id_addr > 0) {
+		memcpy(finfo->rom_sensor_id, &buf[rom_addr->rom_header_main_sensor_id_addr], FIMC_IS_SENSOR_ID_SIZE);
+		finfo->rom_sensor_id[FIMC_IS_SENSOR_ID_SIZE] = '\0';
+	}
+
+	if (rom_addr->rom_header_project_name_start_addr > 0) {
+		memcpy(finfo->project_name, &buf[rom_addr->rom_header_project_name_start_addr], FIMC_IS_PROJECT_NAME_SIZE);
+		finfo->project_name[FIMC_IS_PROJECT_NAME_SIZE] = '\0';
+	}
+
+	if (rom_addr->rom_header_checksum_addr > 0) {
+		finfo->header_section_crc_addr = rom_addr->rom_header_checksum_addr;
+	}
+
+	if(finfo->cal_map_ver[0] != 'V') {
+		info("Camera: Cal Map version read fail or there's no available data.\n");
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	printk(KERN_INFO "Camera[%d]: OTPROM Cal map_version = %c%c%c%c\n", position,
+		finfo->cal_map_ver[0], finfo->cal_map_ver[1], finfo->cal_map_ver[2], finfo->cal_map_ver[3]);
+
+	/* debug info dump */
+#ifdef ROM_DEBUG
+	info("++++ OTPROM data info\n");
+	info(" Header info\n");
+	info(" Module info : %s\n", finfo->header_ver);
+	info(" ID : %c\n", finfo->header_ver[FW_CORE_VER]);
+	info(" Pixel num : %c%c\n", finfo->header_ver[FW_PIXEL_SIZE], finfo->header_ver[FW_PIXEL_SIZE+1]);
+	info(" ISP ID : %c\n", finfo->header_ver[FW_ISP_COMPANY]);
+	info(" Sensor Maker : %c\n", finfo->header_ver[FW_SENSOR_MAKER]);
+	info(" Year : %c\n", finfo->header_ver[FW_PUB_YEAR]);
+	info(" Month : %c\n", finfo->header_ver[FW_PUB_MON]);
+	info(" Release num : %c%c\n", finfo->header_ver[FW_PUB_NUM], finfo->header_ver[FW_PUB_NUM+1]);
+	info(" Manufacturer ID : %c\n", finfo->header_ver[FW_MODULE_COMPANY]);
+	info(" Module ver : %c\n", finfo->header_ver[FW_VERSION_INFO]);
+	info(" Module ID : %c%c%c%c%c%X%X%X%X%X\n",
+			finfo->rom_module_id[0], finfo->rom_module_id[1], finfo->rom_module_id[2],
+			finfo->rom_module_id[3], finfo->rom_module_id[4], finfo->rom_module_id[5],
+			finfo->rom_module_id[6], finfo->rom_module_id[7], finfo->rom_module_id[8],
+			finfo->rom_module_id[9]);
+#endif
+	info("---- OTPROM data info\n");
+
+	/* CRC check */
+	if (!fimc_is_sec_check_cal_crc32(buf, position)) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+#ifdef USE_DIFFERENT_ISP_MODULE
+	if (specific->rom_data[position].use_different_isp_module == true) {
+		supported_isp_module = fimc_is_sec_check_supported_isp(finfo->header_ver[FW_ISP_COMPANY]);
+	}
+#endif
+	if (finfo->header_ver[3] == 'L' || supported_isp_module)
+		crc32_check_list[position][CRC32_CHECK_FACTORY] = crc32_check_list[position][CRC32_CHECK];
+	else
+		crc32_check_list[position][CRC32_CHECK_FACTORY] = false;
+
+	if (specific->use_module_check) {
+		/* Check this module is latest */
+		if (sysfs_finfo[position].header_ver[10] >= rom_addr->camera_module_es_version) {
+			check_latest_cam_module[position] = true;
+		} else {
+			check_latest_cam_module[position] = false;
+		}
+		/* Check this module is final for manufacture */
+		if(sysfs_finfo[position].header_ver[10] == FIMC_IS_LATEST_ROM_VERSION_M) {
+			check_final_cam_module[position] = true;
+		} else {
+			check_final_cam_module[position] = false;
+		}
+	} else {
+		check_latest_cam_module[position] = true;
+		check_final_cam_module[position] = true;
+	}
+
+	/* For CAL DUMP */
+	cal_buf[0] = buf;
+	fimc_is_sec_readcal_dump(specific, cal_buf, cal_size, position);
+
+exit:
+	info("%s X\n",__func__);
+	return ret;
+
+}
+
+int fimc_is_i2c_read_otp_gc5035(struct i2c_client *client, char *buf, u16 start_addr, size_t size)
+{
+	u16 curr_addr = start_addr;
+	u8 start_addr_h = 0;
+	u8 start_addr_l = 0;
+	u8 busy_flag = 0;
+	int retry = 8;
+	int ret = 0;
+	int index;
+
+	for(index = 0; index < size; index++)
+	{
+		start_addr_h = ((curr_addr>>8) & 0x1F);
+		start_addr_l = (curr_addr & 0xFF);
+		fimc_is_sensor_write8(client, GC5035_OTP_PAGE_ADDR, GC5035_OTP_PAGE);
+		fimc_is_sensor_addr8_write8(client, GC5035_OTP_ACCESS_ADDR_HIGH, start_addr_h);
+		fimc_is_sensor_addr8_write8(client, GC5035_OTP_ACCESS_ADDR_LOW, start_addr_l);
+		fimc_is_sensor_addr8_write8(client, GC5035_OTP_MODE_ADDR, 0x20);
+		fimc_is_sensor_addr8_read8(client, GC5035_OTP_BUSY_ADDR, &busy_flag); 
+		while((busy_flag&0x2)>0 && retry > 0 ) {
+			fimc_is_sensor_addr8_read8(client, GC5035_OTP_BUSY_ADDR, &busy_flag); 
+			retry--;
+			msleep(1);
+		}
+
+		if ((busy_flag & 0x1))
+		{
+			err("Sensor OTP_check_flag failed\n");
+			goto exit;
+		}
+
+		ret = fimc_is_sensor_addr8_read8(client, GC5035_OTP_READ_ADDR, &buf[index]);
+		if (unlikely(ret))
+		{
+			err("failed to fimc_is_sensor_addr8_read8 (%d)\n", ret);
+			goto exit;
+		}
+		curr_addr += 8;
+	}
+
+exit:
+	return ret;
+}
+
+int fimc_is_sec_readcal_otprom_gc5035(struct device *dev, int position)
+{
+	int ret = 0;
+	int retry = FIMC_IS_CAL_RETRY_CNT;
+	char *buf = NULL;
+	u8 otp_bank = 0;
+	u16 start_addr = 0;
+	u8 busy_flag = 0;
+
+	struct fimc_is_core *core = dev_get_drvdata(fimc_is_dev);
+	struct fimc_is_vender_specific *specific = core->vender.private_data;
+	struct i2c_client *client = NULL;
+	const struct fimc_is_vender_rom_addr *rom_addr = specific->rom_cal_map_addr[position];
+
+	fimc_is_sec_get_cal_buf(position, &buf);
+	client = specific->rom_client[position];
+
+	if (!rom_addr) {
+		err("%s: otp_%d There is no cal map\n", __func__, position);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	info("%s E\n", __func__);
+
+	if (specific->running_camera[position] == false) {
+		ret = fimc_is_sec_set_registers(client,sensor_global_gc5035, sensor_global_gc5035_size);
+		if (unlikely(ret)) {
+			err("failed to fimc_is_sec_set_registers (%d)\n", ret);
+			ret = -EINVAL;
+		}
+	}
+
+	fimc_is_sec_set_registers(client, sensor_mode_read_initial_setting_gc5035,sensor_mode_read_initial_setting_gc5035_size);
+
+	/* Read OTP page */
+	fimc_is_sensor_write8(client, GC5035_OTP_PAGE_ADDR, GC5035_OTP_PAGE);
+	fimc_is_sensor_write8(client, GC5035_OTP_ACCESS_ADDR_HIGH, ((GC5035_BANK_SELECT_ADDR>>8) & 0x1F));
+	fimc_is_sensor_write8(client, GC5035_OTP_ACCESS_ADDR_LOW, (GC5035_BANK_SELECT_ADDR & 0xFF));
+	fimc_is_sensor_addr8_write8(client, GC5035_OTP_MODE_ADDR, 0x20);
+
+	fimc_is_sensor_addr8_read8(client, GC5035_OTP_BUSY_ADDR, &busy_flag); 
+	while((busy_flag&0x2)>0 && retry > 0 ) {
+		fimc_is_sensor_addr8_read8(client, GC5035_OTP_BUSY_ADDR, &busy_flag); 
+		retry--;
+		msleep(1);
+	}
+
+	if ((busy_flag & 0x1))
+	{
+		err("Sensor OTP_check_flag failed\n");
+		goto exit;
+	}
+
+	fimc_is_sensor_read8(client, GC5035_OTP_READ_ADDR, &otp_bank);
+	info("%s: otp_bank = %d\n", __func__, otp_bank);
+
+	/* select start address */
+	switch(otp_bank) {
+	case 0x01 :
+		start_addr = GC5035_OTP_START_ADDR_BANK1;
+		break;
+	case 0x03 :
+		start_addr = GC5035_OTP_START_ADDR_BANK2;
+		break;
+	case 0x07 :
+		start_addr = GC5035_OTP_START_ADDR_BANK3;
+		break;
+	case 0x0F :
+		start_addr = GC5035_OTP_START_ADDR_BANK4;
+		break;
+	default :
+		start_addr = GC5035_OTP_START_ADDR_BANK1;
+		break;
+	}
+
+	info("%s: otp_start_addr = %x\n", __func__, start_addr);
+	if (unlikely(ret)) {
+		err("failed to fimc_is_sec_set_registers (%d)\n", ret);
+		ret = -EINVAL;
+		goto exit;
+	}
+
+crc_retry:
+	/* read cal data */
+	info("I2C read cal data\n");
+	fimc_is_i2c_read_otp_gc5035(client, buf, start_addr, GC5035_OTP_USED_CAL_SIZE);
+
+	ret = fimc_is_sec_readcal_otprom_header(buf, position);
+	if (unlikely(ret)) {
+		if(retry >= 0) {
+			retry--;
+			goto crc_retry;
+		}
+		crc32_check_list[position][CRC32_CHECK_FACTORY] = false;
+	}
+
+exit:
+	info("%s X\n", __func__);
+	return ret;
+}
+#endif
+
 int fimc_is_sec_readcal_otprom(struct device *dev, int position)
 {
 	int ret = 0;
 #if defined(SENSOR_OTP_5E9)
 	ret = fimc_is_sec_readcal_otprom_5e9(dev, position);
+#elif defined(SENSOR_OTP_GC5035)
+	ret = fimc_is_sec_readcal_otprom_gc5035(dev, position);
 #else
 	//ret = fimc_is_sec_readcal_otprom_legacy(dev, position);
 #endif
@@ -2604,6 +2975,8 @@ int fimc_is_sec_fw_find_rear(struct fimc_is_core *core, int position)
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_GM2_SETF), "%s", FIMC_IS_GM2_SETF);
 	} else if (sensor_id == SENSOR_NAME_S5KGW1) {
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_GW1_SETF), "%s", FIMC_IS_GW1_SETF);
+	} else if (sensor_id == SENSOR_NAME_IMX682) {
+		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_IMX682_SETF), "%s", FIMC_IS_IMX682_SETF);
 	} else {
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_IMX576_SETF), "%s", FIMC_IS_IMX576_SETF);
 	}
@@ -2639,8 +3012,12 @@ int fimc_is_sec_fw_find_front(struct fimc_is_core *core, int position)
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_HI1336_SETF), "%s", FIMC_IS_HI1336_SETF);
 	} else if (sensor_id == SENSOR_NAME_S5K3P8SP) {
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_3P8SP_SETF), "%s", FIMC_IS_3P8SP_SETF);
+	} else if (sensor_id == SENSOR_NAME_HI2021Q) {
+		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_HI2021Q_SETF), "%s", FIMC_IS_HI2021Q_SETF);
 	} else if (sensor_id == SENSOR_NAME_S5K5E9) {
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_5E9_SETF), "%s", FIMC_IS_5E9_SETF);
+	} else if (sensor_id == SENSOR_NAME_S5KGD1) {
+		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_GD1_SETF), "%s", FIMC_IS_GD1_SETF);
 	} else {
 		snprintf(finfo->load_setfile_name, sizeof(FIMC_IS_2X5_SETF), "%s", FIMC_IS_2X5_SETF);
 	}
@@ -2682,6 +3059,7 @@ int fimc_is_sec_run_fw_sel(struct device *dev, int position)
 	char stat_buf[16], allstat_buf[128];
 	int i, ret = 0;
 	int rom_position = position;
+	bool supported_isp_module = false;
 
 	if (fimc_is_sec_get_sysfs_finfo_by_position(position, &finfo)) {
 		err("failed get finfo. plz check position %d", position);
@@ -2731,9 +3109,14 @@ int fimc_is_sec_run_fw_sel(struct device *dev, int position)
 	info("%s: Position status %s", __func__, allstat_buf);
 
 p_err:
+#ifdef USE_DIFFERENT_ISP_MODULE
+	if (specific->rom_data[position].use_different_isp_module == true) {
+		supported_isp_module = fimc_is_sec_check_supported_isp(finfo->header_ver[FW_ISP_COMPANY]);
+	}
+#endif
 	if (specific->check_sensor_vendor) {
 		if (fimc_is_sec_check_rom_ver(core, position)) {
-			if (finfo->header_ver[3] != 'L') {
+			if (finfo->header_ver[3] != 'L' && !supported_isp_module) {
 				err("Not supported module(position %d). Module ver = %s", position, finfo->header_ver);
 				return -EIO;
 			}
@@ -2988,6 +3371,16 @@ int fimc_is_sec_run_fw_sel_from_rom(struct device *dev, int id, bool headerOnly)
 		ret = fimc_is_sec_write_phone_firmware(id);
 
 exit:
+	if (rom_type == ROM_TYPE_OTPROM && specific->running_camera[rom_position] == false
+#if defined(OTPROM_SHARED_MCLK_SENSOR_POSITION)
+		/* Check if other sensor with shared mclk is running */
+		&&  specific->running_camera[OTPROM_SHARED_MCLK_SENSOR_POSITION] == false
+#endif
+	) {
+		/* Power off OTPROM specific pins */
+		fimc_is_sec_otprom_power_off(core, rom_position);
+	}
+
 #if defined(USE_COMMON_CAM_IO_PWR)
 	if (is_running_camera == false && rom_valid == true && force_caldata_dump == false) {
 		fimc_is_sec_rom_power_off(core, rom_position);

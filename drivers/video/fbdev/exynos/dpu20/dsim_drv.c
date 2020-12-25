@@ -483,6 +483,7 @@ static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 #ifdef CONFIG_EXYNOS_PD
 	int active;
 #endif
+	u32 vm_line_cnt;
 
 	spin_lock(&dsim->slock);
 
@@ -506,18 +507,31 @@ static irqreturn_t dsim_irq_handler(int irq, void *dev_id)
 		DPU_EVENT_LOG(DPU_EVT_DSIM_PL_FIFO_EMPTY, &dsim->sd, ktime_set(0, 0));
 	if (int_src & DSIM_INTSRC_RX_DATA_DONE)
 		complete(&dsim->rd_comp);
-	if (int_src & DSIM_INTSRC_FRAME_DONE)
+	if (int_src & DSIM_INTSRC_FRAME_DONE) {
+		dsim->continuous_underrun_cnt = 0;
 		dsim_dbg("dsim%d framedone irq occurs\n", dsim->id);
+	}
 	if (int_src & DSIM_INTSRC_ERR_RX_ECC)
 		dsim_err("RX ECC Multibit error was detected!\n");
 
 	if (int_src & DSIM_INTSRC_UNDER_RUN) {
 		dsim->total_underrun_cnt++;
+		dsim->continuous_underrun_cnt++;
 		DPU_EVENT_LOG(DPU_EVT_DSIM_UNDER_RUN, &dsim->sd, ktime_set(0, 0));
-		dsim_info("dsim%d underrun irq occurs(%d)\n", dsim->id,
-				dsim->total_underrun_cnt);
+		dsim_info("dsim%d underrun irq occurs(%d) (%d)\n", dsim->id,
+				dsim->total_underrun_cnt, dsim->continuous_underrun_cnt);
 		dsim_underrun_info(dsim);
+
 		if (dsim->lcd_info.mode == DECON_VIDEO_MODE) {
+			vm_line_cnt = dsim_reg_get_vm_line_cnt(dsim->id);
+			dsim_info("dsim%d underrun vm_line_cnt: (%08x)\n", dsim->id, vm_line_cnt);
+
+			if (decon && dsim->continuous_underrun_max > 0 &&
+				(dsim->continuous_underrun_cnt >= dsim->continuous_underrun_max)) {
+				decon_dump(decon);
+				BUG();
+			}
+
 			dsim_to_regs_param(dsim, &regs);
 			__dsim_dump(dsim->id, &regs);
 		}
@@ -783,6 +797,24 @@ int dsim_set_panel_power(struct dsim_device *dsim, bool on)
 	return 0;
 }
 
+static void dsim_phy_status(struct phy *phy)
+{
+	void __iomem *phy_iso_regs;
+	u32 phy_iso = 0;
+	/* 1: Isolation bypassed, 0: Isolation enabled */
+
+	dsim_dbg("%s, PHY count : %d\n", __func__, phy->power_count);
+	phy_iso_regs = ioremap(MIPI_PHY_M4S4_CON, 0x10);
+	phy_iso = readl(phy_iso_regs);
+	if ((phy_iso & M4S4_TOP_ISO_BYPASS) != M4S4_TOP_ISO_BYPASS) {
+		dsim_err("Isolation bypass should be set\n");
+		phy_iso = M4S4_TOP_ISO_BYPASS;
+		writel(phy_iso, phy_iso_regs);
+		dsim_err("Isolation bypass was set\n");
+	}
+	iounmap(phy_iso_regs);
+}
+
 static int _dsim_enable(struct dsim_device *dsim, enum dsim_state state)
 {
 	bool panel_ctrl;
@@ -809,6 +841,9 @@ static int _dsim_enable(struct dsim_device *dsim, enum dsim_state state)
 	phy_power_on(dsim->phy);
 	if (dsim->phy_ex)
 		phy_power_on(dsim->phy_ex);
+
+	/* DPHY status */
+	dsim_phy_status(dsim->phy);
 
 	panel_ctrl = (dsim->state == DSIM_STATE_OFF) ? true : false;
 	dsim_reg_init(dsim->id, &dsim->lcd_info, &dsim->clks, panel_ctrl);
@@ -938,7 +973,10 @@ static int dsim_disable(struct dsim_device *dsim)
 	}
 
 	dsim_info("dsim-%d %s +\n", dsim->id, __func__);
-	call_panel_ops(dsim, suspend, dsim);
+
+	if (dsim->lcd_info.mode != DECON_VIDEO_MODE)
+		call_panel_ops(dsim, suspend, dsim);
+
 	ret = _dsim_disable(dsim, next_state);
 	if (ret < 0) {
 		dsim_err("dsim-%d failed to set %s (ret %d)\n",
@@ -1042,6 +1080,9 @@ static int dsim_exit_ulps(struct dsim_device *dsim)
 	phy_power_on(dsim->phy);
 	if (dsim->phy_ex)
 		phy_power_on(dsim->phy_ex);
+
+	/* DPHY status */
+	dsim_phy_status(dsim->phy);
 
 	dsim_reg_init(dsim->id, &dsim->lcd_info, &dsim->clks, false);
 	ret = dsim_reg_exit_ulps_and_start(dsim->id, dsim->lcd_info.ddi_type,
@@ -1311,6 +1352,35 @@ static ssize_t dsim_cmd_sysfs_store(struct device *dev,
 }
 static DEVICE_ATTR(cmd_rw, 0644, dsim_cmd_sysfs_show, dsim_cmd_sysfs_store);
 
+static ssize_t dsim_underrun_max_sysfs_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct dsim_device *dsim = dev_get_drvdata(dev);
+	int size = 0;
+
+	size = (ssize_t)sprintf(buf, "%d\n", dsim->continuous_underrun_max);
+
+	return size;
+}
+
+static ssize_t dsim_underrun_max_sysfs_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct dsim_device *dsim = dev_get_drvdata(dev);
+	unsigned int cont_underrun_max;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &cont_underrun_max);
+	if (ret)
+		return ret;
+
+	dsim->continuous_underrun_max = cont_underrun_max;
+
+	return count;
+}
+
+static DEVICE_ATTR(cont_underrun_max, 0600, dsim_underrun_max_sysfs_show, dsim_underrun_max_sysfs_store);
+
 int dsim_create_cmd_rw_sysfs(struct dsim_device *dsim)
 {
 	int ret = 0;
@@ -1318,6 +1388,10 @@ int dsim_create_cmd_rw_sysfs(struct dsim_device *dsim)
 	ret = device_create_file(dsim->dev, &dev_attr_cmd_rw);
 	if (ret)
 		dsim_err("failed to create command read & write sysfs\n");
+
+	ret = device_create_file(dsim->dev, &dev_attr_cont_underrun_max);
+	if (ret)
+		dsim_err("failed to create cont_underrun_max sysfs\n");
 
 	return ret;
 }
@@ -1338,6 +1412,7 @@ static void dsim_parse_lcd_info(struct dsim_device *dsim)
 	u32 hdr_mal = 0;
 	u32 hdr_mnl = 0;
 	int k;
+	u32 udr_max_num = 0;
 
 	node = of_parse_phandle(dsim->dev->of_node, "lcd_info", 0);
 
@@ -1535,6 +1610,14 @@ static void dsim_parse_lcd_info(struct dsim_device *dsim)
 		dsim->lcd_info.dt_lcd_hdr.hdr_min_luma = hdr_mnl;
 		dsim_info("hdr_max_luma(%d), hdr_max_avg_luma(%d), hdr_min_luma(%d)\n",
 				hdr_mxl, hdr_mal, hdr_mnl);
+	}
+
+	if(!of_property_read_u32(node, "udr_max_num", &udr_max_num)) {
+		dsim->continuous_underrun_max = udr_max_num;
+		dsim_info("udr_max_num(%d)\n", udr_max_num);
+	} else {
+		dsim->continuous_underrun_max = 0;
+		dsim_info("udr_max_num not found\n");
 	}
 }
 

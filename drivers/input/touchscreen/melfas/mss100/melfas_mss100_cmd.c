@@ -1950,6 +1950,24 @@ out:
 	input_info(true, &info->client->dev, "%s: %s\n", __func__, buff);
 }
 
+static void fod_lp_mode(void *device_data)
+{
+	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
+	struct mms_ts_info *info = container_of(sec, struct mms_ts_info, sec);
+	char buff[64] = { 0 };
+
+	sec_cmd_set_default_result(sec);
+
+	info->fod_lp_mode = sec->cmd_param[0];
+
+	input_info(true, &info->client->dev, "%s: fod_lp_mode %d\n", __func__, info->fod_lp_mode);
+
+	snprintf(buff, sizeof(buff), "%s", "OK");
+	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
+	sec->cmd_state = SEC_CMD_STATUS_OK;
+	sec_cmd_set_cmd_exit(sec);
+}
+
 static void fod_enable(void *device_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)device_data;
@@ -2520,7 +2538,8 @@ static struct sec_cmd sec_cmds[] = {
 	{SEC_CMD_H("aod_enable", aod_enable),},
 	{SEC_CMD_H("singletap_enable", singletap_enable),},
 	{SEC_CMD_H("aot_enable", aot_enable),},
-	{SEC_CMD_H("fod_enable", fod_enable),},
+	{SEC_CMD("fod_enable", fod_enable),},
+	{SEC_CMD_H("fod_lp_mode", fod_lp_mode),},
 	{SEC_CMD_H("set_fod_rect", set_fod_rect),},
 	{SEC_CMD_H("ear_detect_enable", ear_detect_enable),},
 	{SEC_CMD_H("pocket_mode_enable", pocket_mode_enable),},

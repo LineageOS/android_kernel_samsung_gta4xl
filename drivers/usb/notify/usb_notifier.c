@@ -33,9 +33,12 @@
 #endif
 #if defined(CONFIG_BATTERY_SAMSUNG_V2)
 #include "../../battery_v2/include/sec_charging_common.h"
+#elif defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+#include "../../battery/common/include/sec_charging_common.h"
 #else
 #include <linux/battery/sec_charging_common.h>
 #endif
+
 #include "usb_notifier.h"
 
 #include <linux/regulator/consumer.h>
@@ -408,17 +411,16 @@ static int ccic_usb_handle_notification(struct notifier_block *nb,
 	}
 	return 0;
 }
-#elif defined(CONFIG_MUIC_NOTIFIER)
+#endif
+
+#if defined(CONFIG_MUIC_NOTIFIER)
 static int muic_usb_handle_notification(struct notifier_block *nb,
 		unsigned long action, void *data)
 {
+	struct otg_notify *o_notify = get_otg_notify();
 #ifdef CONFIG_CCIC_NOTIFIER
 	CC_NOTI_ATTACH_TYPEDEF *p_noti = (CC_NOTI_ATTACH_TYPEDEF *)data;
 	muic_attached_dev_t attached_dev = p_noti->cable_type;
-#else
-	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
-#endif
-	struct otg_notify *o_notify = get_otg_notify();
 
 	pr_info("%s action=%lu, attached_dev=%d\n",
 		__func__, action, attached_dev);
@@ -428,6 +430,33 @@ static int muic_usb_handle_notification(struct notifier_block *nb,
 	case ATTACHED_DEV_CDP_MUIC:
 	case ATTACHED_DEV_UNOFFICIAL_ID_USB_MUIC:
 	case ATTACHED_DEV_UNOFFICIAL_ID_CDP_MUIC:
+		if (action == MUIC_NOTIFY_CMD_DETACH)
+			send_otg_notify(o_notify, NOTIFY_EVENT_USB_CABLE, 0);
+		else if (action == MUIC_NOTIFY_CMD_ATTACH)
+			send_otg_notify(o_notify, NOTIFY_EVENT_USB_CABLE, 1);
+		else
+			pr_err("%s - ACTION Error!\n", __func__);
+		break;
+	default:
+		break;
+	}
+#else
+	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
+
+	pr_info("%s action=%lu, attached_dev=%d\n",
+		__func__, action, attached_dev);
+
+	switch (attached_dev) {
+	case ATTACHED_DEV_USB_MUIC:
+	case ATTACHED_DEV_CDP_MUIC:
+	case ATTACHED_DEV_UNOFFICIAL_ID_USB_MUIC:
+	case ATTACHED_DEV_UNOFFICIAL_ID_CDP_MUIC:
+		if (action == MUIC_NOTIFY_CMD_DETACH)
+			send_otg_notify(o_notify, NOTIFY_EVENT_USB_CABLE, 0);
+		else if (action == MUIC_NOTIFY_CMD_ATTACH)
+			send_otg_notify(o_notify, NOTIFY_EVENT_USB_CABLE, 1);
+		else
+			;
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:
 	case ATTACHED_DEV_JIG_USB_ON_MUIC:
 		if (action == MUIC_NOTIFY_CMD_DETACH)
@@ -514,10 +543,11 @@ static int muic_usb_handle_notification(struct notifier_block *nb,
 	default:
 		break;
 	}
-
+#endif
 	return 0;
 }
 #endif
+
 #if defined(CONFIG_VBUS_NOTIFIER)
 static int vbus_handle_notification(struct notifier_block *nb,
 		unsigned long cmd, void *data)
@@ -568,7 +598,7 @@ static int set_online(int event, int state)
 {
 	union power_supply_propval val;
 	struct device_node *np_charger = NULL;
-	char *charger_name;
+	char *charger_name = NULL;
 
 	if (event == NOTIFY_EVENT_SMTD_EXT_CURRENT)
 		pr_info("request smartdock charging current = %s\n",
@@ -639,12 +669,12 @@ static int exynos_set_peripheral(bool enable)
 	return 0;
 }
 
-#if defined(CONFIG_BATTERY_SAMSUNG_V2)
-static int usb_blocked_chg_control(int set)
+#if defined(CONFIG_BATTERY_SAMSUNG_V2) || defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+static int usb_set_chg_current(int state)
 {
 	union power_supply_propval val;
 	struct device_node *np_charger = NULL;
-	char *charger_name;
+	char *charger_name = NULL;
 
 	np_charger = of_find_node_by_name(NULL, "battery");
 	if (!np_charger) {
@@ -661,19 +691,28 @@ static int usb_blocked_chg_control(int set)
 		return 0;
 	}
 
-	/* current setting for upsm */
-	pr_info("usb blocked : charing current set = %d\n", set);
+	/* current setting */
+	pr_info("usb : charing current set = %d\n", state);
 
-	if (set)
-		val.intval = USB_CURRENT_HIGH_SPEED;
-	else
+	switch (state) {
+	case NOTIFY_SUSPEND:
+		val.intval = USB_CURRENT_SUSPENDED;
+		break;
+	case NOTIFY_UNCONFIGURE:
 		val.intval = USB_CURRENT_UNCONFIGURED;
+		break;
+	case NOTIFY_CONFIGURE:
+		val.intval = USB_CURRENT_HIGH_SPEED;
+		break;
+	default:
+		val.intval = USB_CURRENT_HIGH_SPEED;
+		break;
+	}
 
 	psy_do_property("battery", set,
 			(enum power_supply_property)POWER_SUPPLY_EXT_PROP_USB_CONFIGURE, val);
 
 	return 0;
-
 }
 #endif
 
@@ -692,8 +731,8 @@ static struct otg_notify dwc_lsi_notify = {
 	.device_check_sec = 3,
 	.set_battcall = set_online,
 	.set_ldo_onoff = usb_regulator_onoff,
-#if defined(CONFIG_BATTERY_SAMSUNG_V2)
-	.set_chg_current = usb_blocked_chg_control,
+#if defined(CONFIG_BATTERY_SAMSUNG_V2) || defined(CONFIG_BATTERY_SAMSUNG_LEGO_STYLE)
+	.set_chg_current = usb_set_chg_current,
 #endif
 	.pre_peri_delay_us = 6,
 };
@@ -741,7 +780,8 @@ static int usb_notifier_probe(struct platform_device *pdev)
 	ccic_notifier_register(&pdata->ccic_usb_nb, ccic_usb_handle_notification,
 				   CCIC_NOTIFY_DEV_USB);
 #endif
-#elif defined(CONFIG_MUIC_NOTIFIER)
+#endif
+#if defined(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_register(&pdata->muic_usb_nb, muic_usb_handle_notification,
 			       MUIC_NOTIFY_DEV_USB);
 #endif

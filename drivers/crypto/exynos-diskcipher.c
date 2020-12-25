@@ -55,8 +55,7 @@ int exynos_fmp_crypt_clear(struct bio *bio, void *table_addr)
 			}
 	}
 	if (ret)
-		pr_err("%s: fail to config desc (bio:%p, tfm:%p, ci:%p ret:%d)\n",
-				__func__, bio, dtfm, ci, ret);
+		pr_err("%s: fail to config desc (bio, tfm, ci) ret:%d\n", __func__, ret);
 	return ret;
 }
 
@@ -89,8 +88,7 @@ int exynos_fmp_crypt_cfg(struct bio *bio, void *table_addr,
 #endif
 		ret = crypto_diskcipher_set_crypt(dtfm, &req);
 		if (ret)
-			pr_err("%s: fail to config desc (bio:%p, tfm:%p, ret:%d)\n",
-					__func__, bio, dtfm, ret);
+			pr_err("%s: fail to config desc (bio, tfm) ret:%d\n", __func__, ret);
 		return ret;
 	}
 

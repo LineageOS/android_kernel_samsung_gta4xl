@@ -21,7 +21,7 @@
 #include <linux/module.h>
 #include <linux/uaccess.h>
 
-#define INJECTION_MODE_SENSOR_DATA				0	
+#define INJECTION_MODE_SENSOR_DATA				0
 #define INJECTION_MODE_ADDITIONAL_INFO	 		1
 
 enum {
@@ -35,7 +35,7 @@ enum {
 static int ssp_inject_sensor_data(struct ssp_data *data,
                                           const char *buf, int count)
 {
-	ssp_infof("");	
+	ssp_infof("");
 	return 0;
 }
 
@@ -51,8 +51,9 @@ static int ssp_inject_additional_info(struct ssp_data *data,
 	if(type == SENSOR_TYPE_LIGHT)
 	{
 		int cur_level = 0;
-		int cal_brightness = 0;		
+		int cal_brightness = 0;
 		int32_t brightness;
+		int i;
 		if(count < 5) {
 			ssp_errf("brightness length error %d", count);
 			return -EINVAL;
@@ -61,42 +62,32 @@ static int ssp_inject_additional_info(struct ssp_data *data,
 		cal_brightness = brightness / 10;
 		cal_brightness *= 10;
 
- 		//ssp_errf("br %d, cal_br %d", brightness, cal_brightness);
+		//ssp_errf("br %d, cal_br %d", brightness, cal_brightness);
 
 		// set current level for changing itime
-		if(brightness >= 0 || brightness<= 15) {
-			cur_level = BRIGHTNESS_LEVEL1;
-		}
-		else if(brightness >= 16 || brightness<= 40) {
-			cur_level = BRIGHTNESS_LEVEL2;
-		}
-		else if(brightness >= 41 || brightness<= 50) {
-			cur_level = BRIGHTNESS_LEVEL3;
-		}
-		else if(brightness >= 51 || brightness<= 77) {
-			cur_level = BRIGHTNESS_LEVEL4;
-		}
-		else if(brightness >= 78) {
-			cur_level = BRIGHTNESS_LEVEL5;
+
+		for(i=0 ; i < data->brightness_array_len; i++) {
+			if(brightness <= data->brightness_array[i]) {
+				cur_level = i+1;
+				//ssp_infof(" brightness %d <= %d , level %d", brightness, data->brightness_array[i], cur_level);
+				break;
+			}
 		}
 
 		if(data->last_brightness_level != cur_level) {
-			
 			data->brightness = brightness;
-			
+
 			// update last level
 			data->last_brightness_level = cur_level;
-			
+
 			set_light_brightness(data);
 			data->brightness = cal_brightness;
-		}
-		else if(data->brightness != cal_brightness) {
+		} else if(data->brightness != cal_brightness) {
 			data->brightness = brightness;
 			set_light_brightness(data);
 			data->brightness = cal_brightness;
 		}
-
-	} 
+	}
 	else if(type == SENSOR_TYPE_LIGHT_AUTOBRIGHTNESS)
 	{
 #ifdef CONFIG_SENSORS_SSP_CAMERALIGHT_FOR_TAB
@@ -141,7 +132,7 @@ static int ssp_inject_additional_info(struct ssp_data *data,
 	}
 #endif
 
-	return ret;	
+	return ret;
 }
 
 
@@ -182,7 +173,7 @@ static ssize_t ssp_injection_write(struct file *file, const char __user *buf,
 		if (ret == ERROR) {
 			ret = -EIO;
 		}
-		
+
 		else if (ret == FAIL) {
 			ret = -EAGAIN;
 		}
@@ -206,7 +197,7 @@ static struct file_operations ssp_injection_fops = {
 int ssp_injection_initialize(struct ssp_data *data)
 {
 	int ret;
-	
+
 	/* register injection misc device */
 	data->injection_device.minor = MISC_DYNAMIC_MINOR;
 	data->injection_device.name = "ssp_data_injection";

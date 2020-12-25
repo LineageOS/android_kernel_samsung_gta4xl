@@ -211,6 +211,24 @@ static int gnss_pmu_clear_interrupt(enum gnss_int_clear gnss_int)
 	return ret;
 }
 
+static void gnss_pmu_check_status(void)
+{
+	u32 gnss_ctrl;
+	u32 gnss_pwr_req;
+	u32 gnss_tcxo_req;
+	u32 gnss_mif_req;
+
+	gnss_pmu_read(EXYNOS_PMU_GNSS_CTRL_NS, &gnss_ctrl);
+	gnss_pmu_read(EXYNOS_PMU_SHARED_PWR_REQ_GNSS_CONTROL, &gnss_pwr_req);
+	gnss_pmu_read(EXYNOS_PMU_SHARED_TCXO_REQ_GNSS_CONTROL, &gnss_tcxo_req);
+	gnss_pmu_read(EXYNOS_PMU_SHARED_MIF_REQ_GNSS_CONTROL, &gnss_mif_req);
+
+	gif_info("PMU_GNSS_CTRL_S[0x%08x]\n", gnss_ctrl);
+	gif_info("PMU_GNSS_SHARED_PWR_REQ[0x%08x]\n", gnss_pwr_req);
+	gif_info("PMU_GNSS_SHARED_TCXO_REQ[0x%08x]\n", gnss_tcxo_req);
+	gif_info("PMU_GNSS_SHARED_MIF_REQ[0x%08x]\n", gnss_mif_req);
+}
+
 static int gnss_pmu_release_reset(void)
 {
 	u32 __maybe_unused gnss_ctrl = 0;
@@ -262,7 +280,7 @@ static int gnss_pmu_hold_reset(void)
 
 #ifdef CONFIG_GNSS_PMUCAL
 	cal_gnss_reset_assert();
-	mdelay(50);
+	msleep(50);
 #else
 	/* set sys_pwr_cfg registers */
 	exynos_sys_powerdown_conf_gnss();
@@ -457,6 +475,7 @@ static int gnss_pmu_init_conf(struct gnss_ctl *gc)
 static struct gnssctl_pmu_ops pmu_ops = {
 	.init_conf = gnss_pmu_init_conf,
 	.hold_reset = gnss_pmu_hold_reset,
+	.check_status = gnss_pmu_check_status,
 	.release_reset = gnss_pmu_release_reset,
 	.power_on = gnss_pmu_power_on,
 	.clear_int = gnss_pmu_clear_interrupt,

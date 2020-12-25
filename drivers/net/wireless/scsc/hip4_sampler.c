@@ -46,7 +46,7 @@ static atomic_t in_read;
 
 /* Create a global spinlock for all the instances */
 /* It is less efficent, but we simplify the implementation */
-static spinlock_t  g_spinlock;
+static DEFINE_SPINLOCK(g_spinlock);
 
 static bool hip4_sampler_enable = true;
 module_param(hip4_sampler_enable, bool, S_IRUGO | S_IWUSR);
@@ -897,7 +897,6 @@ void hip4_sampler_create(struct slsi_dev *sdev, struct scsc_mx *mx)
 	hip4_collect_client.prv = mx;
 	scsc_log_collector_register_client(&hip4_collect_client);
 #endif
-	spin_lock_init(&g_spinlock);
 	hip4_sampler.init = true;
 
 	SLSI_INFO_NODEV("%s: Ready to start sampling....\n", DRV_NAME);

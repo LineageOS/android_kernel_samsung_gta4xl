@@ -176,6 +176,14 @@ int fimc_is_hw_mcsc_update_djag_register(struct fimc_is_hw_ip *hw_ip,
 		}
 	}
 
+	if (out_width > MCSC_LINE_BUF_SIZE) {
+		/* Poly input size should be equal and less than line buffer size */
+		warn_hw("%s: DJAG output size exceeds line buffer size(%d > %d), change (%d) -> (%d)",
+			__func__,
+			out_width, MCSC_LINE_BUF_SIZE,
+			out_width, MCSC_LINE_BUF_SIZE);
+		out_width = MCSC_LINE_BUF_SIZE;
+	}
 	if (param->input.width > out_width || param->input.height > out_height) {
 		sdbg_hw(2, "DJAG is not applied still.(input : %dx%d > output : %dx%d)\n", hw_ip,
 				param->input.width, param->input.height,

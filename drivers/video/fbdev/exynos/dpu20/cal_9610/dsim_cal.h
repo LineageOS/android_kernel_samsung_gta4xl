@@ -72,6 +72,7 @@ void dsim_reg_set_mres(u32 id, struct decon_lcd *lcd_info);
 void dsim_reg_set_bist(u32 id, u32 en);
 
 void dsim_reg_set_cmd_transfer_mode(u32 id, u32 lp);
+u32 dsim_reg_get_vm_line_cnt(u32 id);
 
 /* DSIM SFR dump */
 void __dsim_dump(u32 id, struct dsim_regs *regs);
