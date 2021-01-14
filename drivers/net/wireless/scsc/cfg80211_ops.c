@@ -170,7 +170,7 @@ int slsi_change_virtual_intf(struct wiphy *wiphy,
 
 	SLSI_NET_DBG1(dev, SLSI_CFG80211, "type:%u, iftype:%d\n", type, ndev_vif->iftype);
 
-	if (WARN_ON(ndev_vif->activated)) {
+	if (ndev_vif->vif_type != FAPI_VIFTYPE_AP && WARN_ON(ndev_vif->activated)) {
 		r = -EINVAL;
 		goto exit;
 	}
@@ -1420,8 +1420,6 @@ int slsi_del_station(struct wiphy *wiphy, struct net_device *dev,
 		netif_carrier_off(dev);
 
 		/* All STA related packets and info should already have been flushed */
-		slsi_mlme_del_vif(sdev, dev);
-		slsi_vif_deactivated(sdev, dev);
 		ndev_vif->ipaddress = cpu_to_be32(0);
 
 		if (ndev_vif->ap.p2p_gc_keys_set) {
