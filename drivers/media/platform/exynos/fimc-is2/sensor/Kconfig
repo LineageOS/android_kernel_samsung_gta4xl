@@ -62,6 +62,7 @@ source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/cis/Kconf
 source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/actuator/Kconfig"
 source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/flash/Kconfig"
 source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/ois/Kconfig"
+source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/companion/Kconfig"
 source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/dphy/Kconfig"
 source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/pdp/Kconfig"
 source "drivers/media/platform/exynos/fimc-is2/sensor/module_framework/pafstat/Kconfig"

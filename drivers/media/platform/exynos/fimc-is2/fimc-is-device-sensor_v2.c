@@ -1727,6 +1727,7 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 	clear_bit(FIMC_IS_SENSOR_OTF_OUTPUT, &device->state);
 	clear_bit(FIMC_IS_SENSOR_WAIT_STREAMING, &device->state);
 	clear_bit(SENSOR_MODULE_GOT_INTO_TROUBLE, &device->state);
+	clear_bit(IS_SENSOR_S_POWER, &device->state);
 	set_bit(FIMC_IS_SENSOR_BACK_NOWAIT_STOP, &device->state);
 #if defined(SECURE_CAMERA_IRIS)
 	device->smc_state = FIMC_IS_SENSOR_SMC_INIT;
@@ -2100,6 +2101,29 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 		sensor_peri->ois = NULL;
 	}
 
+#ifdef SUPPORT_COMPANION_CHIP
+	/* set companion data */
+	if (device->companion && module->ext.companion_con.product_name == device->companion->id) {
+		u32 i2c_channel = module->ext.companion_con.peri_setting.i2c.channel;
+		sensor_peri->subdev_companion = device->subdev_companion;
+		sensor_peri->companion = device->companion;
+		sensor_peri->companion->sensor_peri = sensor_peri;
+		if (i2c_channel < SENSOR_CONTROL_I2C_MAX)
+			sensor_peri->companion->i2c_lock = &core->i2c_lock[i2c_channel];
+		else
+			mwarn("wrong companion i2c_channel(%d)", device, i2c_channel);
+
+		if (sensor_peri->companion) {
+			set_bit(FIMC_IS_SENSOR_COMPANION_AVAILABLE, &sensor_peri->peri_state);
+		}
+		info("%s[%d] enable companion i2c client. position = %d\n",
+				__func__, __LINE__, core->current_position);
+	} else {
+		sensor_peri->subdev_companion = NULL;
+		sensor_peri->companion = NULL;
+	}
+#endif
+
 	/* set mcu data */
 	if (device->mcu && module->ext.mcu_con.product_name == device->mcu->id) {
 		u32 i2c_channel = module->ext.mcu_con.peri_setting.i2c.channel;
@@ -2277,6 +2301,22 @@ int fimc_is_sensor_s_input(struct fimc_is_device_sensor *device,
 			goto p_err;
 		}
 	}
+
+	if (!IS_ENABLED(CONFIG_SECURE_CAMERA_USE) ||
+			(core->scenario != FIMC_IS_SCENARIO_SECURE)) {
+		ret = v4l2_subdev_call(subdev_csi, core, s_power, 1);
+		if (ret) {
+			merr("v4l2_csi_call(s_power) is fail(%d)", device, ret);
+			goto p_err;
+		}
+
+		set_bit(IS_SENSOR_S_POWER, &device->state);
+	}
+
+	/* release our wakelock if the secure camera is pre-opening */
+	if (IS_ENABLED(CONFIG_SECURE_CAMERA_USE) &&
+			(core->scenario == FIMC_IS_SCENARIO_SECURE))
+		pm_relax(&core->pdev->dev);
 
 	ret = v4l2_subdev_call(subdev_csi, core, init, sensor_index);
 	if (ret) {
@@ -3136,12 +3176,11 @@ static int fimc_is_sensor_back_start(void *qdevice,
 	struct v4l2_subdev *subdev_flite;
 	struct fimc_is_groupmgr *groupmgr;
 	struct fimc_is_group *group;
-#if defined(SECURE_CAMERA_FACE)
 	struct fimc_is_core *core;
-#endif
 
 	FIMC_BUG(!device);
 
+	core = device->private_data;
 	subdev_flite = device->subdev_flite;
 	enable = FLITE_ENABLE_FLAG;
 
@@ -3165,6 +3204,20 @@ static int fimc_is_sensor_back_start(void *qdevice,
 		goto p_err;
 	}
 
+	if (IS_ENABLED(CONFIG_SECURE_CAMERA_USE) &&
+			(core->scenario == FIMC_IS_SCENARIO_SECURE)) {
+		/* re-enable our wakelock */
+		pm_stay_awake(&core->pdev->dev);
+
+		ret = v4l2_subdev_call(device->subdev_csi, core, s_power, 1);
+		if (ret) {
+			merr("v4l2_csi_call(s_power) is fail(%d)", device, ret);
+			goto p_err;
+		}
+
+		set_bit(IS_SENSOR_S_POWER, &device->state);
+	}
+
 	if (subdev_flite) {
 		ret = v4l2_subdev_call(subdev_flite, video, s_stream, enable);
 		if (ret) {
@@ -3183,12 +3236,6 @@ static int fimc_is_sensor_back_start(void *qdevice,
 	}
 
 #if defined(SECURE_CAMERA_FACE)
-	core = device->private_data;
-	if (!core) {
-		merr("core is NULL", device);
-		return -EINVAL;
-	}
-
 	ret = fimc_is_secure_func(core, device, FIMC_IS_SECURE_CAMERA_FACE,
 			core->scenario, SMC_SECCAM_PREPARE);
 	if (ret)
@@ -3594,9 +3641,13 @@ int fimc_is_sensor_runtime_suspend(struct device *dev)
 	if (!subdev_csi)
 		mwarn("subdev_csi is NULL", device);
 
-	ret = v4l2_subdev_call(subdev_csi, core, s_power, 0);
-	if (ret)
-		mwarn("v4l2_csi_call(s_power) is fail(%d)", device, ret);
+	if (test_bit(IS_SENSOR_S_POWER, &device->state)) {
+		ret = v4l2_subdev_call(subdev_csi, core, s_power, 0);
+		if (ret)
+			mwarn("v4l2_csi_call(s_power) is fail(%d)", device, ret);
+		else
+			clear_bit(IS_SENSOR_S_POWER, &device->state);
+	}
 
 	ret = fimc_is_sensor_g_module(device, &module);
 	if (ret) {
@@ -3694,12 +3745,6 @@ int fimc_is_sensor_runtime_resume(struct device *dev)
 	ret = fimc_is_sensor_runtime_resume_pre(dev);
 	if (ret) {
 		merr("fimc_is_sensor_runtime_resume_pre is fail(%d)", device, ret);
-		goto p_err;
-	}
-
-	ret = v4l2_subdev_call(subdev_csi, core, s_power, 1);
-	if (ret) {
-		merr("v4l2_csi_call(s_power) is fail(%d)", device, ret);
 		goto p_err;
 	}
 

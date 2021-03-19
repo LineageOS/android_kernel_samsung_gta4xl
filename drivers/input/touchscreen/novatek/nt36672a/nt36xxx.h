@@ -21,6 +21,7 @@
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
+#include <linux/kthread.h>
 
 #ifdef CONFIG_SAMSUNG_TUI
 #include "stui_inf.h"
@@ -126,6 +127,8 @@ struct nvt_ts_data {
 	const struct nvt_ts_mem_map *mmap;
 	u8 carrier_system;
 
+	struct kthread_work kwork;
+	struct kthread_worker kworker;
 	struct delayed_work work_print_info;
 	u32 print_info_cnt_open;
 	u32 print_info_cnt_release;

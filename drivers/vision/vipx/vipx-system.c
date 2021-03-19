@@ -161,7 +161,9 @@ p_err_clk_on:
 int vipx_system_runtime_suspend(struct vipx_system *sys)
 {
 	vipx_enter();
+	sys->ctrl_ops->hex_dump(sys);
 	sys->ctrl_ops->reset(sys);
+	sys->ctrl_ops->hex_dump(sys);
 	iovmm_deactivate(sys->dev);
 	sys->clk_ops->off(sys);
 	vipx_pm_close(&sys->pm);
@@ -297,6 +299,42 @@ int vipx_system_probe(struct vipx_device *device)
 	sys->dtcm = iomem;
 	sys->dtcm_size = resource_size(res);
 
+	/* SYSREG_VIPX1 */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 4);
+	if (!res) {
+		ret = -EINVAL;
+		vipx_err("platform_get_resource(4) is fail");
+		goto p_err_res_sysreg1;
+	}
+
+	iomem = devm_ioremap_resource(dev, res);
+	if (IS_ERR(iomem)) {
+		ret = PTR_ERR(iomem);
+		vipx_err("devm_ioremap_resource(4) is fail (%d)", ret);
+		goto p_err_remap_sysreg1;
+	}
+
+	sys->sysreg1 = iomem;
+	sys->sysreg1_size = resource_size(res);
+
+	/* SYSREG_VIPX2 */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 5);
+	if (!res) {
+		ret = -EINVAL;
+		vipx_err("platform_get_resource(5) is fail");
+		goto p_err_res_sysreg2;
+	}
+
+	iomem = devm_ioremap_resource(dev, res);
+	if (IS_ERR(iomem)) {
+		ret = PTR_ERR(iomem);
+		vipx_err("devm_ioremap_resource(5) is fail (%d)", ret);
+		goto p_err_remap_sysreg2;
+	}
+
+	sys->sysreg2 = iomem;
+	sys->sysreg2_size = resource_size(res);
+
 	sys->clk_ops = &vipx_clk_ops;
 	sys->ctrl_ops = &vipx_ctrl_ops;
 	sys->pinctrl = devm_pinctrl_get(dev);
@@ -345,6 +383,12 @@ p_err_clk:
 p_err_pm:
 	devm_pinctrl_put(sys->pinctrl);
 p_err_pinctrl:
+	devm_iounmap(dev, sys->sysreg2);
+p_err_remap_sysreg2:
+p_err_res_sysreg2:
+	devm_iounmap(dev, sys->sysreg1);
+p_err_remap_sysreg1:
+p_err_res_sysreg1:
 	devm_iounmap(dev, sys->dtcm);
 p_err_remap_dtcm:
 p_err_res_dtcm:
@@ -370,6 +414,8 @@ void vipx_system_remove(struct vipx_system *sys)
 	sys->clk_ops->deinit(sys);
 	vipx_pm_remove(&sys->pm);
 	devm_pinctrl_put(sys->pinctrl);
+	devm_iounmap(sys->dev, sys->sysreg2);
+	devm_iounmap(sys->dev, sys->sysreg1);
 	devm_iounmap(sys->dev, sys->dtcm);
 	devm_iounmap(sys->dev, sys->itcm);
 	devm_iounmap(sys->dev, sys->reg_ss[REG_SS2]);

@@ -50,7 +50,7 @@
 #error Target processor CONFIG_SOC_EXYNOS3830 not selected
 #endif
 
-#ifdef CONFIG_SCSC_LOG_COLLECTION
+#if IS_ENABLED(CONFIG_SCSC_LOG_COLLECTION)
 #include <scsc/scsc_log_collector.h>
 #endif
 /* Time to wait for CFG_REQ IRQ on 3830 */
@@ -171,6 +171,7 @@ struct platform_mif {
 };
 
 static void power_supplies_on(struct platform_mif *platform);
+inline void platform_int_debug(struct platform_mif *platform);
 
 extern int mx140_log_dump(void);
 
@@ -591,7 +592,9 @@ irqreturn_t platform_wdog_isr(int irq, void *data)
 	int ret = 0;
 	struct platform_mif *platform = (struct platform_mif *)data;
 
-	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INT received\n");
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INT received %d\n", irq);
+	platform_int_debug(platform);
+
 	if (platform->reset_request_handler != platform_mif_irq_reset_request_default_handler) {
 		if (platform->boot_state == WLBT_BOOT_WAIT_CFG_REQ) {
 			/* Spurious interrupt from the SOC during CFG_REQ phase, just consume it */
@@ -624,17 +627,16 @@ irqreturn_t platform_wdog_isr(int irq, void *data)
  * Attached array contains the replacement PMU boot code which should
  * be programmed using the CBUS during the config phase.
  */
-uint32_t ka_patch[] = {
-	// Maxwell142 PMU+PROC combined boot ROM
-	// IP Version: 0xFF
-	// Major Version: 0xF, Minor Version: 0xF
-	// PMU ROM version: 0x2
-	// PROC  ROM version: 0x0
-	// received initial version on 030719
-	0x90750002,
+uint32_t ka_patch[]={
+// Maxwell142 PMU+PROC combined boot ROM
+// IP Version: 0xFF
+// Major Version: 0xF, Minor Version: 0xF
+// PMU ROM version: 0x2
+// PROC  ROM version: 0x0
+	0x80750002,
 	0x11a4c218,
 	0x755a118a,
-	0x9075e090,
+	0x8075e080,
 	0x30b3e5e7,
 	0xa230f8e0,
 	0xf5077411,
@@ -645,14 +647,14 @@ uint32_t ka_patch[] = {
 	0x20b3e501,
 	0xb475fbe0,
 	0x75a3d200,
-	0xd2801890,
+	0xd2801880,
 	0x7907a075,
 	0xe6b07837,
 	0x07b40754,
 	0xd90b8002,
 	0xf5c404f6,
-	0x00af7590,
-	0x90750380,
+	0x00af7580,
+	0x80750380,
 	0xf7532290,
 	0xeff753f7,
 	0x53dff753,
@@ -671,7 +673,7 @@ uint32_t ka_patch[] = {
 	0xc4754ac3,
 	0xa4c57547,
 	0x7561c675,
-	0xd27540c7,
+	0xd27542c7,
 	0x80d37503,
 	0x7500c975,
 	0xcb75d0ca,
@@ -684,7 +686,7 @@ uint32_t ka_patch[] = {
 	0x057802c6,
 	0x8012d074,
 	0x20c34384,
-	0x75d09075,
+	0x75d08075,
 	0x93750291,
 	0x029e7501,
 	0x00000022,
@@ -698,7 +700,7 @@ irqreturn_t platform_cfg_req_isr(int irq, void *data)
 	/*s32 ret = 0;*/
 	unsigned int ka_addr = 0x1000;
 	uint32_t *ka_patch_addr = ka_patch;
-	//unsigned int id;
+	unsigned int id;
 
 #define CHECK(x) do { \
 	int retval = (x); \
@@ -747,6 +749,15 @@ irqreturn_t platform_cfg_req_isr(int irq, void *data)
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "WLBT_REMAP begin\n");
 	CHECK(regmap_write(platform->wlbt_remap, 0x400, WLBT_DBUS_BAAW_0_START >> 12));
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "WLBT_REMAP end\n");
+
+	/* CHIP_VERSION_ID - update with AP view of SOC revision */
+	SCSC_TAG_DEBUG_DEV(PLAT_MIF, platform->dev, "CHIP_VERSION_ID begin\n");
+	regmap_read(platform->wlbt_remap, CHIP_VERSION_ID_OFFSET, &id);
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "Read CHIP_VERSION_ID 0x%x\n", id);
+	id &= ~(CHIP_VERSION_ID_IP_MAJOR | CHIP_VERSION_ID_IP_MINOR);
+	id |= ((exynos_soc_info.revision << CHIP_VERSION_ID_IP_MINOR_SHIFT) & (CHIP_VERSION_ID_IP_MAJOR | CHIP_VERSION_ID_IP_MINOR));
+	CHECK(regmap_write(platform->wlbt_remap, CHIP_VERSION_ID_OFFSET, id));
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "Updated CHIP_VERSION_ID 0x%x\n", id);
 
 	/* DBUS_BAAW regions */
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "DBUS_BAAW begin\n"); // PMU_DBUS_BAAW
@@ -1782,17 +1793,40 @@ static void platform_mif_dump_register(struct scsc_mif_abs *interface)
 	spin_lock_irqsave(&platform->mif_spinlock, flags);
 
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTGR0 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTGR0)));
-	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTGR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTGR1)));
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTCR0 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTCR0)));
-	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTCR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTCR1)));
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTMR0 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTMR0)));
-	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTMR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTMR1)));
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTSR0 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTSR0)));
-	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTSR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTSR1)));
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTMSR0 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTMSR0)));
+
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTGR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTGR1)));
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTCR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTCR1)));
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTMR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTMR1)));
+	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTSR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTSR1)));
 	SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "INTMSR1 0x%08x\n", platform_mif_reg_read(platform, MAILBOX_WLBT_REG(INTMSR1)));
 
 	spin_unlock_irqrestore(&platform->mif_spinlock, flags);
+}
+
+inline void platform_int_debug(struct platform_mif *platform)
+{
+	int i;
+	int irq;
+	int ret;
+	bool pending, active, masked;
+	int irqs[] = {PLATFORM_MIF_MBOX, PLATFORM_MIF_WDOG};
+	char *irqs_name[] = {"MBOX", "WDOG"};
+
+	for (i = 0; i < (sizeof(irqs) / sizeof(int)); i++) {
+		irq = platform->wlbt_irq[irqs[i]].irq_num;
+
+		ret  = irq_get_irqchip_state(irq, IRQCHIP_STATE_PENDING, &pending);
+		ret |= irq_get_irqchip_state(irq, IRQCHIP_STATE_ACTIVE,  &active);
+		ret |= irq_get_irqchip_state(irq, IRQCHIP_STATE_MASKED,  &masked);
+		if (!ret)
+			SCSC_TAG_INFO_DEV(PLAT_MIF, platform->dev, "IRQCHIP_STATE %d(%s): pending %d, active %d, masked %d",
+							  irq, irqs_name[i], pending, active, masked);
+	}
+	platform_mif_dump_register(&platform->interface);
 }
 
 static void platform_mif_cleanup(struct scsc_mif_abs *interface)

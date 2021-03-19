@@ -31,6 +31,7 @@ struct vipx_ctrl_ops {
 	int (*set_irq)(struct vipx_system *sys, int direction, int val);
 	int (*clear_irq)(struct vipx_system *sys, int direction, int val);
 	int (*debug_dump)(struct vipx_system *sys);
+	int (*hex_dump)(struct vipx_system *sys);
 };
 
 extern const struct vipx_ctrl_ops vipx_ctrl_ops;

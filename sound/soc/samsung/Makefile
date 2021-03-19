@@ -49,6 +49,7 @@ snd-soc-odroid-objs := odroid.o
 snd-soc-arndale-rt5631-objs := arndale_rt5631.o
 snd-soc-tm2-wm5110-objs := tm2_wm5110.o
 snd-soc-vogue-rt5665-objs := vogue-rt5665.o jack_rt5665_sysfs_cb.o
+snd-soc-vogue-cs47l15-objs := vogue-cs47l15.o jack_madera_sysfs_cb.o
 snd-soc-sec-audio-objs := sec_audio_sysfs.o sec_audio_debug.o
 
 obj-$(CONFIG_SND_SOC_SAMSUNG_JIVE_WM8750) += snd-soc-jive-wm8750.o
@@ -75,4 +76,5 @@ obj-$(CONFIG_SND_SOC_ARNDALE_RT5631_ALC5631) += snd-soc-arndale-rt5631.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_TM2_WM5110) += snd-soc-tm2-wm5110.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_EXYNOS9610_RT5665_ALC5665) += exynos9610-rt5665.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_VOGUE_RT5665) += snd-soc-vogue-rt5665.o
+obj-$(CONFIG_SND_SOC_SAMSUNG_VOGUE_CS47L15) += snd-soc-vogue-cs47l15.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_AUDIO) += snd-soc-sec-audio.o

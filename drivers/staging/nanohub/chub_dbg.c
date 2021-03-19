@@ -91,8 +91,8 @@ static void chub_dbg_write_file(struct device *dev, char *name, void *buf, int s
 
 	filp = filp_open(file_name, O_RDWR|O_CREAT|O_APPEND, 0666);
 	if (IS_ERR(filp)) {
-		dev_warn(dev, "%s: open '%s' file fail: filp:%p\n",
-			__func__, file_name, filp);
+		dev_warn(dev, "%s: open '%s' file fail\n",
+			__func__, file_name);
 		goto out;
 	}
 
@@ -167,6 +167,9 @@ void chub_dbg_dump_hw(struct contexthub_ipc_info *ipc, enum chub_err_type reason
 #ifdef CONFIG_CHRE_SENSORHUB_HAL
 	nanohub_add_dump_request(ipc->data);
 #endif
+#ifdef CONFIG_SENSORS_SSP
+	ssp_dump_write_file(ipc->ssp_data, &p_dbg_dump->sram[p_dbg_dump->sram_start], ipc_get_chub_mem_size(), reason);
+#endif
 
 #ifdef SUPPORT_DUMP_ON_DRIVER
 	/* dosen't support on android-p */
@@ -174,15 +177,9 @@ void chub_dbg_dump_hw(struct contexthub_ipc_info *ipc, enum chub_err_type reason
 #ifdef	CONFIG_CONTEXTHUB_DEBUG
 		/* write file */
 		dev_info(ipc->dev,
-			"%s: write file: sram:%p, dram:%p(off:%d), size:%d\n",
-			__func__, ipc_get_base(IPC_REG_DUMP),
-			&p_dbg_dump->sram[p_dbg_dump->sram_start],
-			p_dbg_dump->sram_start, ipc_get_chub_mem_size());
+			"%s: write file: size:%d\n",
+			__func__, ipc_get_chub_mem_size());
 
-#ifdef CONFIG_SENSORS_SSP
-		ssp_dump_write_file(ipc->ssp_data, p_dbg_dump->time / NSEC_PER_SEC, reason,
-					&p_dbg_dump->sram[p_dbg_dump->sram_start], ipc_get_chub_mem_size());
-#endif
 		chub_dbg_write_file(ipc->dev, "dram",
 			p_dbg_dump, sizeof(struct dbg_dump));
 
@@ -243,7 +240,7 @@ static ssize_t chub_bin_sram_read(struct file *file, struct kobject *kobj,
 {
 	struct device *dev = kobj_to_dev(kobj);
 
-	dev_info(dev, "%s(%p: %lld, %zu)\n", __func__, battr->private, off, size);
+	dev_info(dev, "%s(%lld, %zu)\n", __func__, off, size);
 	memcpy_fromio(buf, battr->private + off, size);
 	return size;
 }
@@ -254,7 +251,7 @@ static ssize_t chub_bin_dram_read(struct file *file, struct kobject *kobj,
 {
 	struct device *dev = kobj_to_dev(kobj);
 
-	dev_info(dev, "%s(%p: %lld, %zu)\n", __func__, battr->private, off, size);
+	dev_info(dev, "%s(%lld, %zu)\n", __func__, off, size);
 	memcpy(buf, battr->private + off, size);
 	return size;
 }
@@ -493,7 +490,7 @@ void *chub_dbg_get_memory(enum dbg_dump_area area)
 	void *addr;
 	int size;
 
-	pr_info("%s: chub_rmem: %p\n", __func__, chub_rmem);
+	pr_info("%s: chub_rmem\n", __func__);
 
 	if (!chub_rmem)
 		return NULL;
@@ -593,18 +590,15 @@ int chub_dbg_init(struct contexthub_ipc_info *chub)
 	p_dbg_dump->info[area].size = bin_attr_chub_bin_sram.size;
 
 	dev_info(dev,
-		"%s(%pa) is mapped on %p (sram %p: startoffset:%d) with size of %u, dump size %u\n",
-		"dump buffer", &chub_rmem->base, phys_to_virt(chub_rmem->base),
-		&p_dbg_dump->sram[p_dbg_dump->sram_start],
-		p_dbg_dump->sram_start,
-		(u32)chub_rmem->size, get_dbg_dump_size());
+		"%s is mapped (startoffset:%d) with size of %u, dump size %u\n",
+		"dump buffer", p_dbg_dump->sram_start, (u32)chub_rmem->size, get_dbg_dump_size());
 
 	return ret;
 }
 
 static int __init contexthub_rmem_setup(struct reserved_mem *rmem)
 {
-	pr_info("%s: base=%pa, size=%pa\n", __func__, &rmem->base, &rmem->size);
+	pr_info("%s", __func__);
 
 	chub_rmem = rmem;
 	p_dbg_dump = phys_to_virt(rmem->base);

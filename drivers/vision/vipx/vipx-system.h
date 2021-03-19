@@ -29,6 +29,10 @@ struct vipx_system {
 	resource_size_t			itcm_size;
 	void __iomem			*dtcm;
 	resource_size_t			dtcm_size;
+	void __iomem			*sysreg1;
+	resource_size_t			sysreg1_size;
+	void __iomem			*sysreg2;
+	resource_size_t			sysreg2_size;
 
 	const struct vipx_clk_ops	*clk_ops;
 	const struct vipx_ctrl_ops	*ctrl_ops;

@@ -166,7 +166,6 @@ enum exynos_sensor_id {
 	SENSOR_NAME_HI1631		 = 213,
 	SENSOR_NAME_HI2021Q		 = 214,
 
-
 	/* 256~: currently not used */
 	SENSOR_NAME_CUSTOM		 = 301,
 	SENSOR_NAME_SR200		 = 302, // SoC Module
@@ -250,6 +249,12 @@ enum ois_name {
 	OIS_NAME_RUMBA_S6	= 2,
 	OIS_NAME_END,
 	OIS_NAME_NOTHING	= 100,
+};
+
+enum companion_name {
+	COMPANION_NAME_GC607 = 1,
+	COMPANION_NAME_END,
+	COMPANION_NAME_NOTHING = 100,
 };
 
 enum mcu_name {
@@ -349,6 +354,7 @@ struct sensor_open_extended {
 	struct sensor_protocol1 from_con;
 	struct sensor_protocol2 preprocessor_con;
 	struct sensor_protocol1 ois_con;
+	struct sensor_protocol1 companion_con;
 	struct sensor_protocol1 aperture_con;
 	struct sensor_protocol1 mcu_con;
 	u32 mclk;

@@ -22,6 +22,8 @@
 #define FIMC_IS_STR_LEN		10
 
 #define FIMC_IS_MAX_PRIO	(MAX_RT_PRIO)
+#define INTENT_RETRY_CNT	1
+
 /*
  * =================================================================================================
  * CONFIG - FEATURE ENABLE

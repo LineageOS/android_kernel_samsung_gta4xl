@@ -9,6 +9,7 @@ obj-$(CONFIG_EXYNOS_FIMC_BNS) += flite/
 obj-$(CONFIG_USE_DIRECT_IS_CONTROL) += module_framework/ \
 					module_framework/modules/ \
 					module_framework/cis/ \
+					module_framework/companion/ \
 					module_framework/actuator/ \
 					module_framework/flash/ \
 					module_framework/pdp/ \

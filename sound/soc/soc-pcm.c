@@ -1212,9 +1212,11 @@ void dpcm_be_disconnect(struct snd_soc_pcm_runtime *fe, int stream)
 		debugfs_remove(dpcm->debugfs_state);
 #endif
 #endif
+		spin_lock(&fe->card->dpcm_lock);
 		list_del(&dpcm->list_be);
 		list_del(&dpcm->list_fe);
 		kfree(dpcm);
+		spin_unlock(&fe->card->dpcm_lock);
 	}
 }
 
@@ -1457,9 +1459,11 @@ void dpcm_clear_pending_state(struct snd_soc_pcm_runtime *fe, int stream)
 {
 	struct snd_soc_dpcm *dpcm;
 
+	spin_lock(&fe->card->dpcm_lock);
 	list_for_each_entry(dpcm, &fe->dpcm[stream].be_clients, list_be)
 		dpcm->be->dpcm[stream].runtime_update =
 						SND_SOC_DPCM_UPDATE_NO;
+	spin_unlock(&fe->card->dpcm_lock);
 }
 
 static void dpcm_be_dai_startup_unwind(struct snd_soc_pcm_runtime *fe,
@@ -2503,11 +2507,13 @@ close:
 	dpcm_be_dai_shutdown(fe, stream);
 disconnect:
 	/* disconnect any non started BEs */
+	spin_lock(&fe->card->dpcm_lock);
 	list_for_each_entry(dpcm, &fe->dpcm[stream].be_clients, list_be) {
 		struct snd_soc_pcm_runtime *be = dpcm->be;
 		if (be->dpcm[stream].state != SND_SOC_DPCM_STATE_START)
 				dpcm->state = SND_SOC_DPCM_LINK_STATE_FREE;
 	}
+	spin_unlock(&fe->card->dpcm_lock);
 
 	return ret;
 }
@@ -2915,6 +2921,7 @@ int snd_soc_dpcm_can_be_free_stop(struct snd_soc_pcm_runtime *fe,
 	struct snd_soc_dpcm *dpcm, *tmp;
 	int state;
 
+	spin_lock(&fe->card->dpcm_lock);
 	list_for_each_entry_safe(dpcm, tmp, &be->dpcm[stream].fe_clients, list_fe) {
 
 		if (dpcm->fe == fe)
@@ -2923,9 +2930,12 @@ int snd_soc_dpcm_can_be_free_stop(struct snd_soc_pcm_runtime *fe,
 		state = dpcm->fe->dpcm[stream].state;
 		if (state == SND_SOC_DPCM_STATE_START ||
 			state == SND_SOC_DPCM_STATE_PAUSED ||
-			state == SND_SOC_DPCM_STATE_SUSPEND)
-			return 0;
+			state == SND_SOC_DPCM_STATE_SUSPEND) {
+			spin_unlock(&fe->card->dpcm_lock);
+ 			return 0;
+		}
 	}
+	spin_unlock(&fe->card->dpcm_lock);
 
 	/* it's safe to free/stop this BE DAI */
 	return 1;
@@ -2942,6 +2952,7 @@ int snd_soc_dpcm_can_be_params(struct snd_soc_pcm_runtime *fe,
 	struct snd_soc_dpcm *dpcm;
 	int state;
 
+	spin_lock(&fe->card->dpcm_lock);
 	list_for_each_entry(dpcm, &be->dpcm[stream].fe_clients, list_fe) {
 
 		if (dpcm->fe == fe)
@@ -2951,9 +2962,12 @@ int snd_soc_dpcm_can_be_params(struct snd_soc_pcm_runtime *fe,
 		if (state == SND_SOC_DPCM_STATE_START ||
 			state == SND_SOC_DPCM_STATE_PAUSED ||
 			state == SND_SOC_DPCM_STATE_SUSPEND ||
-			state == SND_SOC_DPCM_STATE_PREPARE)
-			return 0;
-	}
+			state == SND_SOC_DPCM_STATE_PREPARE) {
+			spin_unlock(&fe->card->dpcm_lock);
+ 			return 0;
+		}
+ 	}
+	spin_unlock(&fe->card->dpcm_lock);
 
 	/* it's safe to change hw_params */
 	return 1;
@@ -3022,6 +3036,7 @@ static ssize_t dpcm_show_state(struct snd_soc_pcm_runtime *fe,
 		goto out;
 	}
 
+	spin_lock(&fe->card->dpcm_lock);
 	list_for_each_entry(dpcm, &fe->dpcm[stream].be_clients, list_be) {
 		struct snd_soc_pcm_runtime *be = dpcm->be;
 		params = &dpcm->hw_params;
@@ -3042,7 +3057,7 @@ static ssize_t dpcm_show_state(struct snd_soc_pcm_runtime *fe,
 				params_channels(params),
 				params_rate(params));
 	}
-
+	spin_unlock(&fe->card->dpcm_lock);
 out:
 	return offset;
 }

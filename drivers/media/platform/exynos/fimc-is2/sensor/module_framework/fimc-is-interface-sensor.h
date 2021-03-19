@@ -579,6 +579,7 @@ enum fimc_is_sensor_peri_state {
 	FIMC_IS_SENSOR_FLASH_AVAILABLE,
 	FIMC_IS_SENSOR_PREPROCESSOR_AVAILABLE,
 	FIMC_IS_SENSOR_OIS_AVAILABLE,
+	FIMC_IS_SENSOR_COMPANION_AVAILABLE,
 	FIMC_IS_SENSOR_PDP_AVAILABLE,
 	FIMC_IS_SENSOR_APERTURE_AVAILABLE,
 	FIMC_IS_SENSOR_PAFSTAT_AVAILABLE,
@@ -739,6 +740,15 @@ struct fimc_is_ois_ops {
 	int (*ois_center_shift)(struct v4l2_subdev *subdev);
 	int (*ois_set_center)(struct v4l2_subdev *subdev);
 	u8 (*ois_read_mode)(struct v4l2_subdev *subdev);
+};
+
+/*COMPANION*/
+struct fimc_is_companion_ops {
+	int (*companion_init)(struct v4l2_subdev *subdev);
+	int (*companion_deinit)(struct v4l2_subdev *subdev);
+	int (*companion_log_status)(struct v4l2_subdev *subdev);
+	int (*companion_set_global_setting)(struct v4l2_subdev *subdev);
+	int (*companion_mode_change)(struct v4l2_subdev *subdev, u32 mode);
 };
 
 struct fimc_is_sensor_interface;

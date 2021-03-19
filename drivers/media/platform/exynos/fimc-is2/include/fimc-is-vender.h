@@ -89,6 +89,12 @@ enum fimc_is_rom_cal_index {
 	ROM_CAL_MAX,
 };
 
+struct capture_intent_info_t {
+	u16 captureIntent;
+	u16 captureCount;
+	s16 captureEV;
+};
+
 #ifdef USE_CAMERA_HW_BIG_DATA
 #define CAM_HW_ERR_CNT_FILE_PATH "/data/vendor/camera/camera_hw_err_cnt.dat"
 

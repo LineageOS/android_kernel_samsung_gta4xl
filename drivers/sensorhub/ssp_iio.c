@@ -52,6 +52,7 @@ enum
 #define RESET_REASON_KERNEL_RESET            0x01
 #define RESET_REASON_MCU_CRASHED             0x02
 #define RESET_REASON_SYSFS_REQUEST           0x03
+#define RESET_REASON_HUB_REQUEST             0x04
 
 static int ssp_preenable(struct iio_dev *indio_dev)
 {
@@ -139,14 +140,14 @@ static void report_prox_cal_data(struct ssp_data *data, int type,
 	data->prox_thresh[0] = p_cal_data->prox_cal[0];
 	data->prox_thresh[1] = p_cal_data->prox_cal[1];
 	ssp_info("prox thresh %u %u", data->prox_thresh[0], data->prox_thresh[1]);
-	
+
 	proximity_calibration_off(data);
 }
 #endif
 
 void report_sensor_data(struct ssp_data *data, int type,
                         struct sensor_value *event)
-{	
+{
 	if (type == SENSOR_TYPE_PROXIMITY) {
 		ssp_info("Proximity Sensor Detect : %u, raw : %u",
 		         event->prox, event->prox_ex);
@@ -231,7 +232,7 @@ void report_sensor_data(struct ssp_data *data, int type,
 			ssp_infof("Light AB Sensor : report cam enable");
 			data->camera_lux_en = true;
 			data->buf[type].ab_lux = CAMERA_LUX_ENABLE;
-		}	
+		}
 		else if(data->camera_lux_en &&
 			((data->buf[type].ab_lux >= data->camera_lux_hysteresis[1]) ||
 			((int)data->buf[type].ab_brightness <= data->camera_br_hysteresis[1])))
@@ -340,7 +341,7 @@ void report_scontext_data(struct ssp_data *data, char *data_buf, u32 length)
 
         ssp_infof("0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x, //0x%llx",
                 buf[16], buf[17], buf[18], buf[19], buf[20], buf[21], buf[22], buf[23], timestamp);
-*/		
+*/
 		ssp_iio_push_buffers(data->indio_devs[SENSOR_TYPE_SCONTEXT], timestamp,
 		                     buf, data->info[SENSOR_TYPE_SCONTEXT].report_data_len);
 
@@ -356,14 +357,16 @@ void report_scontext_notice_data(struct ssp_data *data, char notice)
 	notice_buf[2] = notice;
 	if (notice == SCONTEXT_AP_STATUS_RESET) {
 		len = 4;
-		if (data->is_reset_from_sysfs == true) {
+		if (data->reset_type == RESET_TYPE_KERNEL_SYSFS) {
 			notice_buf[3] = RESET_REASON_SYSFS_REQUEST;
-			data->is_reset_from_sysfs = false;
-		} else if (data->is_reset_from_kernel == true) {
+		} else if(data->reset_type == RESET_TYPE_KERNEL_NO_EVENT) {
 			notice_buf[3] = RESET_REASON_KERNEL_RESET;
-			data->is_reset_from_kernel = false;
-		} else {
+		} else if(data->reset_type == RESET_TYPE_KERNEL_COM_FAIL) {
+			notice_buf[3] = RESET_REASON_KERNEL_RESET;
+		} else if(data->reset_type == RESET_TYPE_HUB_CRASHED) {
 			notice_buf[3] = RESET_REASON_MCU_CRASHED;
+		} else if(data->reset_type == RESET_TYPE_HUB_NO_EVENT) {
+			notice_buf[3] = RESET_REASON_HUB_REQUEST;
 		}
 	}
 
@@ -378,6 +381,13 @@ void report_scontext_notice_data(struct ssp_data *data, char notice)
 	} else {
 		ssp_errf("invalid notice(0x%x)", notice);
 	}
+}
+
+void report_sensorhub_data(struct ssp_data *data, char* buf)
+{
+	ssp_infof();
+	ssp_iio_push_buffers(data->indio_devs[SENSOR_TYPE_SENSORHUB], get_current_timestamp(),
+							buf, data->info[SENSOR_TYPE_SENSORHUB].report_data_len);
 }
 
 static void *init_indio_device(struct device *dev, struct ssp_data *data,
@@ -458,7 +468,7 @@ int initialize_indio_dev(struct device *dev, struct ssp_data *data)
 		data->indio_channels[type].scan_type.storagebits = realbits_size;
 		data->indio_channels[type].scan_type.shift = IIO_SHIFT;
 		data->indio_channels[type].scan_type.repeat = repeat_size;
-		
+
 		data->indio_devs[type]
 		        = (struct iio_dev *)init_indio_device(dev, data,
 		                                              &indio_info, &data->indio_channels[type],

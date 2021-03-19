@@ -8,5 +8,8 @@ obj-$(CONFIG_BATTERY_NOTIFIER)	+= battery_notifier.o
 obj-$(CONFIG_CCIC_NOTIFIER)		+= sec_pd.o
 
 obj-$(CONFIG_FUELGAUGE_SM5713)		+= sm5713_fuelgauge.o
+obj-$(CONFIG_FUELGAUGE_S2MU106)		+= s2mu106_fuelgauge.o
 
 obj-$(CONFIG_CHARGER_SM5713)	+= sm5713_charger.o sm5713_charger_oper.o
+obj-$(CONFIG_CHARGER_S2MU106)   += s2mu106_charger.o
+obj-$(CONFIG_PM_S2MU106)	+= s2mu106_pmeter.o

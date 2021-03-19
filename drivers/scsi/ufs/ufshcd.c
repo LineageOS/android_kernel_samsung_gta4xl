@@ -7566,17 +7566,21 @@ retry:
 
 	dev_info(hba->dev, "UFS device initialized\n");
 
-	/* Init check for device descriptor sizes */
-	ufshcd_init_desc_sizes(hba);
+	if (!ufshcd_eh_in_progress(hba) && !hba->pm_op_in_progress
+			&& !hba->async_resume) {
+		/* Init check for device descriptor sizes */
+		ufshcd_init_desc_sizes(hba);
 
-	ret = ufs_get_device_desc(hba, &card);
-	if (ret) {
-		dev_err(hba->dev, "%s: Failed getting device info. err = %d\n",
-			__func__, ret);
-		goto out;
+		ret = ufs_get_device_desc(hba, &card);
+		if (ret) {
+			dev_err(hba->dev, "%s: Failed getting device info. err = %d\n",
+				__func__, ret);
+			goto out;
+		}
+
+		ufs_fixup_device_setup(hba, &card);
 	}
 
-	ufs_fixup_device_setup(hba, &card);
 	ufshcd_tune_unipro_params(hba);
 
 	ret = ufshcd_set_vccq_rail_unused(hba,
@@ -7745,7 +7749,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 
 	if (hba->async_resume) {
 		scsi_block_requests(hba->host);
+		dev_info(hba->dev, "UFS async resume started\n");
 		err = ufshcd_probe_hba(hba);
+		dev_info(hba->dev, "UFS async resume finished\n");
 		if (err)
 			goto err;
 
@@ -9519,7 +9525,6 @@ SEC_UFS_DATA_ATTR(SEC_UFS_err_sum, "\"OPERR\":\"%d\",\"UICCMD\":\"%d\",\"UICERR\
 		err_info->query_count.Query_err);
 #endif
 
-UFS_DEV_ATTR(lt,  "%01x", hba->lifetime);
 UFS_DEV_ATTR(sense_err_count, "\"MEDIUM\":\"%d\",\"HWERR\":\"%d\"\n",
 						hba->host->medium_err_cnt, hba->host->hw_err_cnt); 
 UFS_DEV_ATTR(sense_err_logging, "\"LBA0\":\"%lx\",\"LBA1\":\"%lx\",\"LBA2\":\"%lx\""
@@ -9532,6 +9537,37 @@ UFS_DEV_ATTR(sense_err_logging, "\"LBA0\":\"%lx\",\"LBA1\":\"%lx\",\"LBA2\":\"%l
 		, hba->host->issue_LBA_list[6], hba->host->issue_LBA_list[7]
 		, hba->host->issue_LBA_list[8], hba->host->issue_LBA_list[9]
 		, hba->host->issue_region_map);
+
+static ssize_t ufs_lt_info_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct Scsi_Host *host = container_of(dev, struct Scsi_Host, shost_dev);
+	struct ufs_hba *hba = shost_priv(host);
+	u8 health_buf[QUERY_DESC_MAX_SIZE];
+	int err = 0;
+
+	if (!hba) {
+		printk("skipping ufs lt read\n");
+		hba->lifetime = 0;
+	} else if (hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL) {
+		pm_runtime_get_sync(hba->dev);
+		err = ufshcd_read_health_desc(hba, health_buf,
+						hba->desc_size.hlth_desc);
+		pm_runtime_put(hba->dev);
+		if (err)
+			goto skip;
+		dev_info(hba->dev,"LT: 0x%02x \n", health_buf[3]<<4|health_buf[4]);
+
+		hba->lifetime = health_buf[HEALTH_DEVICE_DESC_PARAM_LIFETIMEA];
+	} else {
+		/* return previous LT value if not operational */
+		dev_info(hba->dev, "ufshcd_state : %d, old LT: %01x\n",
+					hba->ufshcd_state, hba->lifetime);
+	}
+
+skip:
+	return sprintf(buf, "%01x\n", hba->lifetime);
+}
+static DEVICE_ATTR(lt, 0444, ufs_lt_info_show, NULL);
 
 static ssize_t ufs_lc_info_show(struct device *dev, struct device_attribute *attr, char *buf)
 {

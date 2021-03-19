@@ -207,9 +207,14 @@ int ssp_send_command(struct ssp_data *data, u8 cmd, u8 type, u8 subcmd,
                      int *receive_buf_len)
 {
 	int status = 0;
-	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	struct ssp_msg *msg;
 	DECLARE_COMPLETION_ONSTACK(done);
 
+	if ((type < SENSOR_TYPE_MAX) && !(data->sensor_probe_state& (1ULL << type))) {
+		ssp_infof("Skip this function!, sensor is not connected(0x%llx)", data->sensor_probe_state);
+		return -ENODEV;
+	}
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 	msg->cmd = cmd;
 	msg->type = type;
 	msg->subcmd = subcmd;
@@ -260,7 +265,7 @@ int ssp_send_command(struct ssp_data *data, u8 cmd, u8 type, u8 subcmd,
 	//mutex_unlock(&data->cmd_mutex);
 
 	if(status < 0) {
-		recovery_mcu(data, RESET_KERNEL_COM_FAIL);
+		reset_mcu(data, RESET_TYPE_KERNEL_COM_FAIL);
 		ssp_errf("status=%d", status);
 	}
 	return status;
@@ -278,8 +283,8 @@ int enable_sensor(struct ssp_data *data, unsigned int type, u8* buf, int buf_len
 {
 	int ret = 0;
 
-	ret = ssp_send_command(data, CMD_ADD, type, 0, 0, buf, buf_len,
-	                       NULL, NULL);
+	if (type != SENSOR_TYPE_SCONTEXT)
+		ret = ssp_send_command(data, CMD_ADD, type, 0, 0, buf, buf_len, NULL, NULL);
 
 	if (ret < 0) {
 		ssp_errf("commnd error %d", ret);
@@ -295,8 +300,8 @@ int enable_sensor(struct ssp_data *data, unsigned int type, u8* buf, int buf_len
 int disable_sensor(struct ssp_data *data, unsigned int type, u8 *buf, int buf_len)
 {
 	int ret = 0;
-	ret = ssp_send_command(data, CMD_REMOVE, type, 0, 0, buf, buf_len,
-	                       NULL, NULL);
+	if (type != SENSOR_TYPE_SCONTEXT)
+		ret = ssp_send_command(data, CMD_REMOVE, type, 0, 0, buf, buf_len, NULL, NULL);
 
 	if (ret < 0) {
 		ssp_errf("commnd error %d", ret);
@@ -313,36 +318,36 @@ static int convert_ap_status(int command)
 {
 	int ret = -1;
 	switch (command) {
-	case SCONTEXT_AP_STATUS_SHUTDOWN :
+	case SCONTEXT_AP_STATUS_SHUTDOWN:
 		ret = AP_SHUTDOWN;
 		break;
-	case SCONTEXT_AP_STATUS_WAKEUP :
+	case SCONTEXT_AP_STATUS_WAKEUP:
 		ret = LCD_ON;
 		break;
-	case SCONTEXT_AP_STATUS_SLEEP :
+	case SCONTEXT_AP_STATUS_SLEEP:
 		ret = LCD_OFF;
 		break;
-	case SCONTEXT_AP_STATUS_RESUME :
+	case SCONTEXT_AP_STATUS_RESUME:
 		ret = AP_RESUME;
 		break;
-	case SCONTEXT_AP_STATUS_SUSPEND :
+	case SCONTEXT_AP_STATUS_SUSPEND:
 		ret = AP_SUSPEND;
 		break;
 #if 0
-	case SCONTEXT_AP_STATUS_RESET :
+	case SCONTEXT_AP_STATUS_RESET:
 		ret = AP_SHUTDOWN;
 		break;
 #endif
-	case SCONTEXT_AP_STATUS_POW_CONNECTED :
+	case SCONTEXT_AP_STATUS_POW_CONNECTED:
 		ret = POW_CONNECTED;
 		break;
-	case SCONTEXT_AP_STATUS_POW_DISCONNECTED :
+	case SCONTEXT_AP_STATUS_POW_DISCONNECTED:
 		ret = POW_DISCONNECTED;
 		break;
-	case SCONTEXT_AP_STATUS_CALL_IDLE :
+	case SCONTEXT_AP_STATUS_CALL_IDLE:
 		ret = CALL_IDLE;
 		break;
-	case SCONTEXT_AP_STATUS_CALL_ACTIVE :
+	case SCONTEXT_AP_STATUS_CALL_ACTIVE:
 		ret = CALL_ACTIVE;
 		break;
 	}

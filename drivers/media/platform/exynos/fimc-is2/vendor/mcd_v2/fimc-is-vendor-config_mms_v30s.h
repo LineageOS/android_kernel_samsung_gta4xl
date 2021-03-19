@@ -19,6 +19,8 @@
 #define CAMERA_REAR3               (REAR_SUB_CAMERA)          /* For Rear3 of SYSFS */
 //#define CAMERA_FRONT2            (FRONT_SUB_CAMERA)         /* For Front2 of SYSFS */
 
+/***** SUPPORT COMPANION CHIP *****/
+// #define SUPPORT_COMPANION_CHIP                                /* Companion Chip Support*/
 
 /***** SUPPORT FUCNTION DEFINE *****/
 #define SAMSUNG_LIVE_OUTFOCUS                                 /* Allocate memory For Dual Camera */

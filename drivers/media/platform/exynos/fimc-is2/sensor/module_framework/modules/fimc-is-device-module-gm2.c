@@ -363,6 +363,7 @@ static int __init sensor_module_gm2_probe(struct platform_device *pdev)
 	ext->from_con.product_name = FROMDRV_NAME_NOTHING;
 	ext->preprocessor_con.product_name = PREPROCESSOR_NAME_NOTHING;
 	ext->ois_con.product_name = OIS_NAME_NOTHING;
+	ext->companion_con.product_name = COMPANION_NAME_NOTHING;
 
 	if (pdata->af_product_name !=  ACTUATOR_NAME_NOTHING) {
 		ext->actuator_con.product_name = pdata->af_product_name;
@@ -406,6 +407,17 @@ static int __init sensor_module_gm2_probe(struct platform_device *pdev)
 	} else {
 		ext->ois_con.product_name = pdata->ois_product_name;
 		ext->ois_con.peri_type = SE_NULL;
+	}
+
+	if (pdata->companion_product_name != COMPANION_NAME_NOTHING) {
+		ext->companion_con.product_name = pdata->companion_product_name;
+		ext->companion_con.peri_type = SE_I2C;
+		ext->companion_con.peri_setting.i2c.channel = pdata->companion_i2c_ch;
+		ext->companion_con.peri_setting.i2c.slave_address = pdata->companion_i2c_addr;
+		ext->companion_con.peri_setting.i2c.speed = 400000;
+	} else {
+		ext->companion_con.product_name = pdata->companion_product_name;
+		ext->companion_con.peri_type = SE_NULL;
 	}
 
 	v4l2_subdev_init(subdev_module, &subdev_ops);

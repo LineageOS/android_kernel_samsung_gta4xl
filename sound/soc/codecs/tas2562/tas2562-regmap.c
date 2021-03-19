@@ -525,20 +525,23 @@ void tas2562_enable_irq(struct tas2562_priv *p_tas2562, bool enable)
 			}
 			irq1_enabled = 1;
 		}
-		if (gpio_is_valid(p_tas2562->mn_irq_gpio2) && irq2_enabled == 0) {
-			enable_irq(p_tas2562->mn_irq2);
-			irq2_enabled = 1;
+		if (p_tas2562->mn_channels == 2) {
+			if (gpio_is_valid(p_tas2562->mn_irq_gpio2) && irq2_enabled == 0) {
+				enable_irq(p_tas2562->mn_irq2);
+				irq2_enabled = 1;
+			}
 		}
-
 		p_tas2562->mb_irq_eable = true;
 	} else {
 		if (gpio_is_valid(p_tas2562->mn_irq_gpio) && irq1_enabled == 1) {
 			disable_irq_nosync(p_tas2562->mn_irq);
 			irq1_enabled = 0;
 		}
-		if (gpio_is_valid(p_tas2562->mn_irq_gpio2) && irq2_enabled == 1) {
-			disable_irq_nosync(p_tas2562->mn_irq2);
-			irq2_enabled = 0;
+		if (p_tas2562->mn_channels == 2) {
+			if (gpio_is_valid(p_tas2562->mn_irq_gpio2) && irq2_enabled == 1) {
+				disable_irq_nosync(p_tas2562->mn_irq2);
+				irq2_enabled = 0;
+			}
 		}
 		p_tas2562->mb_irq_eable = false;
 	}
@@ -1063,6 +1066,11 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 	}
 	dev_info(&p_client->dev, "After SW reset\n");
 
+	/*Initialize IRQ-Work Routin irrespective or IRQ GPIO
+	 *as it is used for PowerUp function also
+	 */
+	INIT_DELAYED_WORK(&p_tas2562->irq_work, irq_work_routine);
+
 	if (gpio_is_valid(p_tas2562->mn_irq_gpio)) {
 		n_result = gpio_request(p_tas2562->mn_irq_gpio, "TAS2562-IRQ");
 		if (n_result < 0) {
@@ -1076,7 +1084,6 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 
 		p_tas2562->mn_irq = gpio_to_irq(p_tas2562->mn_irq_gpio);
 		dev_info(p_tas2562->dev, "irq = %d\n", p_tas2562->mn_irq);
-		INIT_DELAYED_WORK(&p_tas2562->irq_work, irq_work_routine);
 		n_result = request_threaded_irq(p_tas2562->mn_irq,
 				tas2562_irq_handler,
 				NULL, IRQF_TRIGGER_FALLING|IRQF_ONESHOT,
@@ -1103,7 +1110,6 @@ static int tas2562_i2c_probe(struct i2c_client *p_client,
 
 		p_tas2562->mn_irq2 = gpio_to_irq(p_tas2562->mn_irq_gpio2);
 		dev_info(p_tas2562->dev, "irq = %d\n", p_tas2562->mn_irq2);
-		INIT_DELAYED_WORK(&p_tas2562->irq_work, irq_work_routine);
 		n_result = request_threaded_irq(p_tas2562->mn_irq2,
 				tas2562_irq_handler,
 				NULL, IRQF_TRIGGER_FALLING|IRQF_ONESHOT,

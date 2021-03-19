@@ -33,6 +33,28 @@ int mifqos_init(struct mifqos *qos, struct scsc_mif_abs *mif)
 	return 0;
 }
 
+int mifqos_set_affinity_cpu(struct mifqos *qos, u8 cpu)
+{
+	struct scsc_mif_abs *mif;
+	int ret = -ENODEV;
+
+	if (!qos)
+		return -EIO;
+
+	mutex_lock(&qos->lock);
+
+	SCSC_TAG_INFO(MIF, "Change CPU affinity to %d\n", cpu);
+
+	mif = qos->mif;
+
+	if (mif->mif_set_affinity_cpu)
+		ret = mif->mif_set_affinity_cpu(mif, cpu);
+
+	mutex_unlock(&qos->lock);
+
+	return ret;
+}
+
 int mifqos_add_request(struct mifqos *qos, enum scsc_service_id id, enum scsc_qos_config config)
 {
 	struct scsc_mif_abs *mif;

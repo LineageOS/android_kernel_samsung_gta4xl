@@ -39,6 +39,7 @@ static char *sm5713_fg_supplied_to[] = {
 #define IGNORE_N_I_OFFSET 1
 
 #define SM5713_FG_FULL_DEBUG 1
+#define I2C_ERROR_COUNT_MAX 5
 
 #ifdef ENABLE_SM5713_MQ_FUNCTION
 static int sm5713_get_full_chg_mq (struct sm5713_fuelgauge_data *fuelgauge);
@@ -72,10 +73,19 @@ bool sm5713_fg_fuelalert_init(struct sm5713_fuelgauge_data *fuelgauge,
 #if !defined(CONFIG_SEC_FACTORY)
 static void sm5713_fg_periodic_read(struct sm5713_fuelgauge_data *fuelgauge)
 {
+	static struct timespec old_ts = {0, };
+	struct timespec c_ts = {0, };
 	u8 reg;
 	int i;
 	int data[0x10];
 	char *str = NULL;
+
+	c_ts = ktime_to_timespec(ktime_get_boottime());
+	if ((unsigned long)(c_ts.tv_sec - old_ts.tv_sec) <= 180 && old_ts.tv_sec != 0) { /*3 min*/
+		pr_info("%s: skip old(%ld) current(%ld)\n", __func__, old_ts.tv_sec, c_ts.tv_sec);
+		return;
+	}
+	old_ts = c_ts;
 
 	str = kzalloc(sizeof(char)*1024, GFP_KERNEL);
 	if (!str)
@@ -907,8 +917,6 @@ static int sm5713_fg_fs_read_word_table(struct i2c_client *client,
 	return ret;
 }
 
-
-
 int sm5713_fg_calculate_iocv(struct sm5713_fuelgauge_data *fuelgauge, bool is_vsys)
 {
 	bool only_lb = false, sign_i_offset = 0; /*valid_cb=false, */
@@ -1290,9 +1298,10 @@ int get_v_max_index_by_cycle(struct sm5713_fuelgauge_data *fuelgauge)
 
 static bool sm5713_fg_reg_init(struct sm5713_fuelgauge_data *fuelgauge, bool is_surge)
 {
-	int i, j, value, ret;
+	int i, j, k, value, ret = 0;
 	uint8_t table_reg;
 	int write_table[TABLE_MAX][FG_TABLE_LEN+1];
+	int error_remain = 0, error_check = 0;
 
 	pr_info("%s: sm5713_fg_reg_init START!!\n", __func__);
 
@@ -1371,13 +1380,31 @@ static bool sm5713_fg_reg_init(struct sm5713_fuelgauge_data *fuelgauge, bool is_
 		for (j = 0; j <= FG_TABLE_LEN; j++) {
 			sm5713_write_word(fuelgauge->i2c, (table_reg + j), write_table[i][j]);
 			msleep(10);
-			if (write_table[i][j] != sm5713_fg_fs_read_word_table(fuelgauge->i2c, (table_reg + j), TABLE_READ_COUNT)) {
-				pr_info("%s: TABLE write FAIL retry[%d][%d] = 0x%x : 0x%x\n",
+			value = sm5713_fg_fs_read_word_table(fuelgauge->i2c,
+				(table_reg + j), TABLE_READ_COUNT);
+			if (write_table[i][j] == value) {
+				pr_info("%s: TABLE write and verify OK [%d][%d] = 0x%x : 0x%x\n",
 					__func__, i, j, (table_reg + j), write_table[i][j]);
-				sm5713_write_word(fuelgauge->i2c, (table_reg + j), write_table[i][j]);
+			} else {
+				error_check = 1;
+
+				for (k = 1; k <= I2C_ERROR_COUNT_MAX; k++) {
+					pr_info("%s: TABLE write data ERROR!!!! rewrite [%d][%d] = 0x%x : 0x%x, count=%d\n",
+						__func__, i, j, (table_reg + j), write_table[i][j], k);
+					sm5713_write_word(fuelgauge->i2c, (table_reg + j), write_table[i][j]);
+					msleep(30);
+					value = sm5713_fg_fs_read_word_table(fuelgauge->i2c,
+						(table_reg + j), TABLE_READ_COUNT);
+					if (write_table[i][j] == value) {
+						pr_info("%s: TABLE rewrite OK [%d][%d] = 0x%x : 0x%x, count=%d\n",
+						__func__, i, j, (table_reg + j), write_table[i][j], k);
+						break;
+					}
+
+					if (k == I2C_ERROR_COUNT_MAX)
+						error_remain = 1;
+				}
 			}
-			pr_info("%s: TABLE write OK [%d][%d] = 0x%x : 0x%x\n",
-				__func__, i, j, (table_reg + j), write_table[i][j]);
 		}
 	}
 
@@ -1470,6 +1497,10 @@ static bool sm5713_fg_reg_init(struct sm5713_fuelgauge_data *fuelgauge, bool is_
 	value = sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_USER_RESERV_1);
 	value &= ~DATA_VERSION;
 	value |= (fuelgauge->info.data_ver << 4) & DATA_VERSION;
+	if (error_remain)
+		value |= I2C_ERROR_REMAIN;
+	if (error_check)
+		value |= I2C_ERROR_CHECK;
 	sm5713_write_word(fuelgauge->i2c, SM5713_FG_REG_USER_RESERV_1, value);
 	pr_info("%s: RESERVED = %d : 0x%x\n", __func__, SM5713_FG_REG_USER_RESERV_1, value);
 
@@ -1689,7 +1720,7 @@ static int sm5713_fg_set_jig_mode_real_vbat(struct sm5713_fuelgauge_data *fuelga
 	}
 
 	/** meas_mode = 0 is inbat mode with jig **/
-	if (meas_mode == 0)	{
+	if (meas_mode == SEC_BAT_INBAT_FGSRC_SWITCHING_VBAT) {
 		stat = sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_AUX_STAT);
 		if (stat & 0x0002) {
 			fuelgauge->isjigmoderealvbat = true;
@@ -1889,6 +1920,8 @@ static void sm5713_fg_buffer_read(struct sm5713_fuelgauge_data *fuelgauge)
 
 static bool sm5713_fg_init(struct sm5713_fuelgauge_data *fuelgauge, bool is_surge)
 {
+	int error_remain, ret;
+
 	fuelgauge->info.is_FG_initialised = 0;
 
 	if (sm5713_get_device_id(fuelgauge) < 0) {
@@ -1926,7 +1959,11 @@ static bool sm5713_fg_init(struct sm5713_fuelgauge_data *fuelgauge, bool is_surg
 	pr_info("%s: q_max_now = 0x%x\n", __func__, fuelgauge->info.q_max_now);
 #endif
 
-	if (sm5713_fg_check_reg_init_need(fuelgauge)) {
+	ret = sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_USER_RESERV_1);
+	error_remain = (ret & I2C_ERROR_REMAIN) ? 1 : 0;
+	pr_info("%s: reserv_1 = 0x%x\n", __func__, ret);
+
+	if (sm5713_fg_check_reg_init_need(fuelgauge) || error_remain) {
 		if (sm5713_fg_reg_init(fuelgauge, is_surge))
 			pr_info("%s: boot time kernel init DONE!\n", __func__);
 		else
@@ -2435,6 +2472,9 @@ static int sm5713_fg_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
 		return -ENODATA;
 #endif
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->intval = IC_TYPE_IFPMIC_SM5713;
+		break;
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
 		case POWER_SUPPLY_EXT_PROP_JIG_GPIO:
@@ -2445,6 +2485,10 @@ static int sm5713_fg_get_property(struct power_supply *psy,
 			pr_info("%s: jig gpio = %d \n", __func__, val->intval);
 			break;
 		case POWER_SUPPLY_EXT_PROP_MEASURE_SYS:
+			/* not supported */
+			val->intval = 0;
+			break;
+		case POWER_SUPPLY_EXT_PROP_VOLT_SLOPE:
 			val->intval = (sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_VOLT_CAL) & 0xFF00);
 			pr_info("%s: VOLT SLOPE = 0x%x \n", __func__, val->intval);
 			break;
@@ -2570,7 +2614,7 @@ static int sm5713_fg_set_property(struct power_supply *psy,
 #endif
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {
-		case POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING:
+		case POWER_SUPPLY_EXT_PROP_FGSRC_SWITCHING:
 			sm5713_fg_set_jig_mode_real_vbat(fuelgauge, val->intval);
 			break;
 		case POWER_SUPPLY_EXT_PROP_FUELGAUGE_FACTORY:

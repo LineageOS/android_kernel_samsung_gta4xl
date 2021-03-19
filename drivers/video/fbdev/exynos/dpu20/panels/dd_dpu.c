@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) Samsung Electronics Co., Ltd.
  *
@@ -18,9 +19,17 @@
 
 #include <video/mipi_display.h>
 
+#if defined(CONFIG_ARCH_EXYNOS) && defined(CONFIG_EXYNOS_DPU20)
 #include "../dsim.h"
 #include "../decon.h"
+#include "../decon_board.h"
 #include "../decon_notify.h"
+#elif defined(CONFIG_ARCH_EXYNOS) && defined(CONFIG_EXYNOS_DPU30)
+#include "../dpu30/dsim.h"
+#include "../dpu30/decon.h"
+#include "decon_board.h"
+#include "decon_notify.h"
+#endif
 
 #include "dd.h"
 
@@ -29,7 +38,7 @@ static bool log_boot;
 #define dbg_warn(fmt, ...)	pr_warn(pr_fmt("%s: %3d: %s: " fmt), "dsim", __LINE__, __func__, ##__VA_ARGS__)
 #define dbg_boot(fmt, ...)	do { if (unlikely(log_boot)) dbg_info(fmt, ##__VA_ARGS__); } while (0)
 
-#define LCD_INFO_DTS_NAME	"lcd_info"
+#define PANEL_DTS_NAME	"lcd_info"
 
 #define DD_DPU_LIST	\
 __XX(REFRESH,		"timing,refresh",	"refresh",		0400)	\
@@ -125,7 +134,12 @@ struct d_info {
 
 static void configure_lcd_info(u32 **point, struct dsim_device *dsim)
 {
+#if defined(CONFIG_EXYNOS_DPU20)
 	struct decon_lcd *lcd_info = &dsim->lcd_info;
+#elif defined(CONFIG_EXYNOS_DPU30)
+	struct exynos_panel_info *lcd_info = &dsim->panel->lcd_info;
+#endif
+
 #if defined(CONFIG_SOC_EXYNOS7570) || defined(CONFIG_SOC_EXYNOS7870)
 	struct dsim_clks *clks = &dsim->clks_param.clks;
 #else
@@ -446,17 +460,9 @@ static int init_debugfs_lcd_info(struct d_info *d)
 	unsigned int i = 0;
 	struct dentry *debugfs = NULL;
 
-	nplcd = of_find_node_with_property(NULL, LCD_INFO_DTS_NAME);
+	nplcd = of_find_recommend_lcd_info(NULL);
 	if (!nplcd) {
-		dbg_warn("%s property does not exist\n", LCD_INFO_DTS_NAME);
-		return -EINVAL;
-	}
-
-	dbg_info("%s property find in node %s\n", LCD_INFO_DTS_NAME, nplcd->name);
-
-	nplcd = of_parse_phandle(nplcd, LCD_INFO_DTS_NAME, 0);
-	if (!nplcd) {
-		dbg_warn("%s node does not exist\n", LCD_INFO_DTS_NAME);
+		dbg_warn("of_find_recommend_lcd_info fail\n");
 		return -EINVAL;
 	}
 
@@ -500,9 +506,9 @@ static int status_show(struct seq_file *m, void *unused)
 	struct d_info *d = m->private;
 	unsigned int i, j;
 
-	seq_puts(m, "--------------------------------------------------------------\n");
-	seq_puts(m, "                    |    DEFAULT|    REQUEST|    CURRENT|   RW\n");
-	seq_puts(m, "--------------------------------------------------------------\n");
+	seq_puts(m, "--------------------------------------------------------------------------------------------\n");
+	seq_puts(m, "                    |   DEFAULT|   REQUEST|   CURRENT|   DEFAULT|   REQUEST|   CURRENT|   RW\n");
+	seq_puts(m, "--------------------------------------------------------------------------------------------\n");
 	for (i = 0; i < DD_DPU_LIST_MAX; i++) {
 		for (j = 0; j < debugfs_list[i].length; j++) {
 			if (!DD_DPU_LIST_NAME[i + j])
@@ -511,10 +517,17 @@ static int status_show(struct seq_file *m, void *unused)
 			if (!strncmp(DD_DPU_LIST_NAME[i + j], "HIDDEN", strlen("HIDDEN")))
 				continue;
 
-			if (d->pending_param[i + j])
-				seq_printf(m, "%20s| %10u| %10u| %10u| %4s\n", DD_DPU_LIST_NAME[i + j], d->default_param[i + j], d->request_param[i + j], d->current_param[i + j], (debugfs_list[i].mode & 0222) ? "RW" : "R");
-			else
-				seq_printf(m, "%20s| %10u| %10s| %10u| %4s\n", DD_DPU_LIST_NAME[i + j], d->default_param[i + j], " ", d->current_param[i + j], (debugfs_list[i].mode & 0222) ? "RW" : "R");
+			seq_printf(m, "%20s|", DD_DPU_LIST_NAME[i + j]);
+
+			seq_printf(m, "%10u|", d->default_param[i + j]);
+			(d->pending_param[i + j]) ? seq_printf(m, "%10u|", d->request_param[i + j]) : seq_printf(m, "%10s|", "");
+			seq_printf(m, "%10u|", d->current_param[i + j]);
+
+			seq_printf(m, "%#10x|", d->default_param[i + j]);
+			(d->pending_param[i + j]) ? seq_printf(m, "%#10x|", d->request_param[i + j]) : seq_printf(m, "%10s|", "");
+			seq_printf(m, "%#10x|", d->current_param[i + j]);
+
+			seq_printf(m, "%4s\n", (debugfs_list[i].mode & 0222) ? "RW" : "R");
 		}
 	}
 	seq_puts(m, "\n");
@@ -731,24 +744,9 @@ static int help_show(struct seq_file *m, void *unused)
 	seq_puts(m, "---------- status usage\n");
 	seq_puts(m, "1. you can check current configuration status like below\n");
 	seq_puts(m, "# cat status\n");
-	seq_puts(m, "--------------------------------------------------------------\n");
-	seq_puts(m, "                    |    DEFAULT|    REQUEST|    CURRENT|   RW\n");
-	seq_puts(m, "--------------------------------------------------------------\n");
-	for (i = 0; i < DD_DPU_LIST_MAX; i++) {
-		for (j = 0; j < debugfs_list[i].length; j++) {
-			if (!DD_DPU_LIST_NAME[i + j])
-				continue;
 
-			if (!strncmp(DD_DPU_LIST_NAME[i + j], "HIDDEN", strlen("HIDDEN")))
-				continue;
+	status_show(m, NULL);
 
-			if (d->pending_param[i + j])
-				seq_printf(m, "%20s| %10u| %10u| %10u| %4s\n", DD_DPU_LIST_NAME[i + j], d->default_param[i + j], d->request_param[i + j], d->current_param[i + j], (debugfs_list[i].mode & 0222) ? "RW" : "R");
-			else
-				seq_printf(m, "%20s| %10u| %10s| %10u| %4s\n", DD_DPU_LIST_NAME[i + j], d->default_param[i + j], " ", d->current_param[i + j], (debugfs_list[i].mode & 0222) ? "RW" : "R");
-		}
-	}
-	seq_puts(m, "\n");
 	seq_puts(m, "= R: Read Only. you can not modify this value\n");
 	seq_puts(m, "= DEFAULT: default booting parameter\n");
 	seq_puts(m, "= REQUEST: request parameter (not applied yet)\n");
@@ -821,7 +819,6 @@ static int __init dd_dpu_init(void)
 
 	return 0;
 }
-
-late_initcall(dd_dpu_init);
+late_initcall_sync(dd_dpu_init);
 #endif
 

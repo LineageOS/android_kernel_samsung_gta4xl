@@ -219,6 +219,8 @@ enum VOTER_ENUM {
 #define HV_CHARGER_STATUS_STANDARD1	12000 /* mW */
 #define HV_CHARGER_STATUS_STANDARD2	20000 /* mW */
 #define HV_CHARGER_STATUS_STANDARD3 24500 /* mW */
+#define HV_CHARGER_STATUS_STANDARD4 40000 /* mW */
+
 enum {
 	NORMAL_TA,
 	AFC_9V_OR_15W,
@@ -367,6 +369,7 @@ typedef struct sec_battery_platform_data {
 	/* NO NEED TO BE CHANGED */
 	unsigned int pre_afc_input_current;
 	unsigned int pre_wc_afc_input_current;
+	unsigned int select_pd_input_current;
 	unsigned int store_mode_max_input_power;
 	unsigned int prepare_ta_delay;
 
@@ -399,14 +402,6 @@ typedef struct sec_battery_platform_data {
 #endif
 	unsigned int swelling_high_rechg_voltage;
 	unsigned int swelling_low_rechg_voltage;
-
-#if defined(CONFIG_CALC_TIME_TO_FULL)
-	unsigned int ttf_hv_12v_charge_current;
-	unsigned int ttf_hv_charge_current;
-	unsigned int ttf_hv_12v_wireless_charge_current;
-	unsigned int ttf_hv_wireless_charge_current;
-	unsigned int ttf_wireless_charge_current;
-#endif
 
 #if defined(CONFIG_STEP_CHARGING)
 	/* step charging */
@@ -759,9 +754,12 @@ typedef struct sec_battery_platform_data {
 	unsigned int adc_type[];
 } sec_battery_platform_data_t;
 
+struct sec_ttf_data;
+
 struct sec_battery_info {
 	struct device *dev;
 	sec_battery_platform_data_t *pdata;
+	struct sec_ttf_data *ttf_d;
 
 	/* power supply used in Android */
 	struct power_supply *psy_bat;
@@ -790,9 +788,11 @@ struct sec_battery_info {
 	bool pdic_attach;
 	bool pdic_ps_rdy;
 	bool hv_pdo;
+	bool init_src_cap;
 	struct pdic_notifier_struct pdic_info;
 	struct sec_bat_pdic_list pd_list;
 #endif
+	bool update_pd_list;
 #if defined(CONFIG_VBUS_NOTIFIER)
 	struct notifier_block vbus_nb;
 	int muic_vbus_status;
@@ -973,6 +973,8 @@ struct sec_battery_info {
 	int muic_cable_type;
 	int extended_cable_type;
 
+	bool pd_disable_by_afc_option;
+
 #if defined(CONFIG_BATTERY_SAMSUNG_MHS)
 	int charging_port;
 #endif
@@ -993,6 +995,8 @@ struct sec_battery_info {
 	struct wake_lock wc_headroom_wake_lock;
 	struct wake_lock wpc_tx_wake_lock;
 	struct delayed_work wpc_tx_work;
+	struct wake_lock hv_disable_wake_lock;
+	struct delayed_work hv_disable_work;
 #if defined(CONFIG_UPDATE_BATTERY_DATA)
 	struct delayed_work batt_data_work;
 	struct wake_lock batt_data_wake_lock;
@@ -1076,10 +1080,6 @@ struct sec_battery_info {
 	bool charging_block;
 #if defined(CONFIG_AFC_CHARGER_MODE)
 	char *hv_chg_name;
-#endif
-#if defined(CONFIG_CALC_TIME_TO_FULL)
-	int timetofull;
-	struct delayed_work timetofull_work;
 #endif
 #if defined(CONFIG_WIRELESS_TX_MODE)
 	int tx_avg_curr;
@@ -1253,5 +1253,6 @@ void sec_bat_parse_mode_dt_work(struct work_struct *work);
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 void sec_bat_check_battery_health(struct sec_battery_info *battery);
 #endif
+bool sec_bat_hv_wc_normal_mode_check(struct sec_battery_info *battery);
 
 #endif /* __SEC_BATTERY_H */

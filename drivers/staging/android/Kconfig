@@ -33,6 +33,12 @@ config ANDROID_LOW_MEMORY_KILLER
 	  scripts (/init.rc), and it defines priority values with minimum free memory size
 	  for each priority.
 
+config SAMSUNG_LMKD_DEBUG
+	bool "record lmkd kill history"
+	default y
+	help
+	  record lmkd kill history
+
 config SAMSUNG_FREECESS
 	bool "thraw frozen process when recv sig"
 	default n

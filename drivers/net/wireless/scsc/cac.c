@@ -172,10 +172,10 @@ static int add_ebw_ie(u8 *buf, size_t buf_len, u8 tsid)
  * return: length of bytes that were added
  */
 static int add_tsrs_ie(u8 *buf, size_t buf_len, u8 tsid,
-		       u8 rates[CCX_MAX_NUM_RATES], int num_rates)
+		       u8 rates[CCX_MAX_NUM_RATES], size_t num_rates)
 {
 	u8     *pos;
-	size_t ie_len = (size_t)(7 + num_rates);
+	size_t ie_len = 7 + num_rates;
 	int    i;
 
 	if ((buf == NULL) || (buf_len < ie_len) || (rates == NULL) ||
@@ -1060,7 +1060,7 @@ static void cac_process_addts_rsp(struct slsi_dev *sdev, struct net_device *netd
 
 	if (rsp->hdr.status_code != ADDTS_STATUS_ACCEPTED) {
 		SLSI_ERR(sdev, "CAC: TSPEC rejected (status=0x%02X)", rsp->hdr.status_code);
-		cac_delete_tspec_by_state(sdev, itr->id , 0);
+		cac_delete_tspec_by_state(sdev, itr->id, 0);
 		return;
 	}
 

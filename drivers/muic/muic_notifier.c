@@ -371,7 +371,7 @@ static int __init muic_notifier_init(void)
 	muic_uses_new_noti = 1;
 #endif
 
-#if defined(CONFIG_SWITCH) && !defined(CONFIG_MUIC_S2MU106)
+#if defined(CONFIG_SWITCH)
 	switch_device = sec_device_create(NULL, "switch");
 	if (IS_ERR(switch_device)) {
 		pr_err("(%s): failed to created device (switch_device)!\n",

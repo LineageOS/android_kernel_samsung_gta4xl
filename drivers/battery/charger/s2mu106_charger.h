@@ -377,6 +377,8 @@ struct s2mu106_charger_data {
 	struct wake_lock ivr_wake_lock;
 	struct delayed_work wc_current_work;
 	struct wake_lock wc_current_wake_lock;
+	struct delayed_work pmeter_3lv_work;
+	struct delayed_work pmeter_2lv_work;
 
 	struct workqueue_struct *charger_wqueue;
 	struct power_supply *psy_chg;

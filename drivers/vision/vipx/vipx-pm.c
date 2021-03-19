@@ -135,11 +135,7 @@ static int __vipx_pm_qos_add(struct vipx_pm *pm)
 	vipx_enter();
 	mutex_lock(&pm->lock);
 	if (pm->default_qos < 0)
-#if defined(CONFIG_EXYNOS_VIPX_EXYNOS9610_A)
-		__vipx_pm_qos_set_default(pm, 1);
-#else
 		__vipx_pm_qos_set_default(pm, 0);
-#endif
 
 	if (!vipx_pm_qos_active(pm)) {
 		pm_qos_add_request(&pm->cam_qos_req, PM_QOS_CAM_THROUGHPUT,

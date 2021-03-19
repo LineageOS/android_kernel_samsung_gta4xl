@@ -1250,8 +1250,6 @@ static void fw_update(void *device_data)
 
 	nvt_ts_get_fw_info(ts);
 
-	ts->sec_function = nvt_ts_mode_read(ts);
-
 	snprintf(buff, sizeof(buff), "%s", "OK");
 	sec_cmd_set_cmd_result(sec, buff, strnlen(buff, sizeof(buff)));
 	sec->cmd_state = SEC_CMD_STATUS_OK;
@@ -1325,6 +1323,7 @@ static void get_fw_ver_ic(void *device_data)
 
 	nvt_ts_bootloader_reset(ts);
 	nvt_ts_check_fw_reset_state(ts, RESET_STATE_REK);
+	nvt_ts_mode_restore(ts);
 
 	//---set xdata index to EVENT BUF ADDR---
 	temp[0] = 0xFF;
@@ -1377,6 +1376,8 @@ static void get_fw_ver_ic(void *device_data)
 
 out:
 	nvt_ts_bootloader_reset(ts);
+	nvt_ts_check_fw_reset_state(ts, RESET_STATE_REK);
+	nvt_ts_mode_restore(ts);
 out_power_off:
 	snprintf(buff, sizeof(buff), "%s", "NG");
 	sec->cmd_state = SEC_CMD_STATUS_FAIL;
@@ -1509,6 +1510,8 @@ static void get_checksum_data(void *device_data)
 	}
 
 	nvt_ts_bootloader_reset(ts);
+	nvt_ts_check_fw_reset_state(ts, RESET_STATE_REK);
+	nvt_ts_mode_restore(ts);
 
 	snprintf(buff, sizeof(buff), "%s", csum_result);
 	sec->cmd_state = SEC_CMD_STATUS_OK;
@@ -1520,6 +1523,8 @@ static void get_checksum_data(void *device_data)
 
 err:
 	nvt_ts_bootloader_reset(ts);
+	nvt_ts_check_fw_reset_state(ts, RESET_STATE_REK);
+	nvt_ts_mode_restore(ts);
 out:
 	snprintf(buff, sizeof(buff), "%s", "NG");
 	sec->cmd_state = SEC_CMD_STATUS_FAIL;

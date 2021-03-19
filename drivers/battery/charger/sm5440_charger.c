@@ -297,7 +297,7 @@ static int sm5440_get_adc_values(struct sm5440_charger *sm5440, const char *str,
 	dev_info(sm5440->dev, "%s:vbus:%d:ibus:%d:vout:%d:vbat:%d:vnow:%d:inow:%d:them:%d:dietemp:%d (mode=%d)\n",
 			str, adc_vbus, adc_ibus, adc_vout, adc_vbat, vnow, inow, adc_them, adc_dietemp, sm5440->adc_mode);
 #else
-	dev_info(sm5440->dev, "%s:vbus:%d:ibus:%d:vout:%d:vbat:them:%d:dietemp: (mode=%d)%d\n",
+	dev_info(sm5440->dev, "%s:vbus:%d:ibus:%d:vout:%d:vbat:%d:them:%d:dietemp:%d (mode=%d)\n",
 			str, adc_vbus, adc_ibus, adc_vout, adc_vbat, adc_them, adc_dietemp, sm5440->adc_mode);
 #endif
 
@@ -621,7 +621,11 @@ static int sm5440_setup_pps_work_charging_config(struct sm5440_charger *sm5440)
 			__func__, sm5440->chg.cv_gl, sm5440->chg.ci_gl, sm5440->chg.cc_gl);
 
 	sm5440->chg.vbat_reg = sm5440->chg.cv_gl + sm5440->pdata->cv_gl_offset;
-	sm5440->chg.ibus_lim = sm5440->chg.ci_gl + sm5440->pdata->ci_gl_offset;
+	if (sm5440->chg.ci_gl <= sm5440->pdata->ta_min_current) {
+		sm5440->chg.ibus_lim = sm5440->chg.ci_gl + (sm5440->pdata->ci_gl_offset * 2);
+	} else {
+		sm5440->chg.ibus_lim = sm5440->chg.ci_gl + sm5440->pdata->ci_gl_offset;
+	}
 	sm5440->chg.ibat_reg = sm5440->chg.cc_gl + sm5440->pdata->cc_gl_offset;
 	sm5440_set_ibuslim(sm5440, sm5440->chg.ibus_lim);
 	sm5440_set_vbatreg(sm5440, sm5440->chg.vbat_reg);
@@ -880,7 +884,7 @@ static int psy_chg_get_health(struct sm5440_charger *sm5440)
 		if (op_mode == 0x0) {
 			adc_vbus = sm5440_convert_adc(sm5440, SM5440_ADC_VBUS);
 			if (adc_vbus < 3800) {
-				health = POWER_SUPPLY_HEALTH_UNDERVOLTAGE;
+				health = POWER_SUPPLY_HEALTH_DC_ERR;
 			} else {
 				health = POWER_SUPPLY_HEALTH_GOOD;
 			}
@@ -890,12 +894,8 @@ static int psy_chg_get_health(struct sm5440_charger *sm5440)
 			sm5440_read_reg(sm5440, SM5440_REG_STATUS3, &reg);
 			if ((reg >> 5) & 0x1) {
 				health = POWER_SUPPLY_HEALTH_GOOD;
-			} else {
-				if ((reg >> 7) & 0x1) {
-					health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
-				} else if ((reg >> 6) & 0x1) {
-					health = POWER_SUPPLY_HEALTH_UNDERVOLTAGE;
-				}
+			} else if (((reg >> 6) & 0x1) || ((reg >> 7) & 0x1)) {
+				health = POWER_SUPPLY_HEALTH_DC_ERR;
 			}
 			dev_info(sm5440->dev, "%s: op_mode=%d, status3=0x%x, health=%d\n",
 					__func__, op_mode, reg, health);
@@ -1261,15 +1261,17 @@ static int update_work_state(struct sm5440_charger *sm5440, u8 state)
 }
 
 #if APPLY_SW_OCP
+#define MAX_CNT	3
 static int sm5440_check_ocp(struct sm5440_charger *sm5440)
 {
 	int i, ret = 0;
-	u8 loop_status;
+	u8 reg;
 
 
-	for (i=0; i < 3; ++i) {
-		loop_status = check_loop_status(sm5440);
-		if (loop_status == LOOP_IBUSLIM) {
+	for (i=0; i < MAX_CNT; ++i) {
+		sm5440_read_reg(sm5440, SM5440_REG_STATUS2, &reg);
+		reg = reg & 0x82;   /* IBUSLIM | THEM_REG */
+		if (reg == LOOP_IBUSLIM) {
 			dev_err(sm5440->dev, "%s: IBUSLIM enabled(i=%d)\n", __func__, i);
 			msleep(1000);
 		} else {
@@ -1277,7 +1279,8 @@ static int sm5440_check_ocp(struct sm5440_charger *sm5440)
 		}
 	}
 
-	if (loop_status == LOOP_IBUSLIM) {
+	if (i == MAX_CNT) {
+		dev_err(sm5440->dev, "%s: Detected SW/IBUSOCP\n", __func__);
 		sm5440->chg.err = SM5440_ERR_IBUSOCP;
 		sm5440_request_state_work(sm5440, SM5440_DC_ERR, DELAY_NONE);
 		ret = -EIO;
@@ -1903,6 +1906,7 @@ static void sm5440_error_work(struct work_struct *work)
 	if (ret < 0) {
 		return;
 	}
+	sm5440_setup_adc(sm5440, SM5440_ADC_MODE_OFF);
 	sm5440_enable_charging(sm5440, 0);
 }
 
@@ -2048,7 +2052,7 @@ static int sm5440_hw_init_config(struct sm5440_charger *sm5440)
 	sm5440_set_wdt_timer(sm5440, WDT_TIMER_S_30);
 	sm5440_set_freq(sm5440, sm5440->pdata->freq);
 
-	sm5440_write_reg(sm5440, SM5440_REG_CNTL2, 0xF0);			   /* disable IBUSOCP,IBATOCP,THEMREG,THEM */
+	sm5440_write_reg(sm5440, SM5440_REG_CNTL2, 0xF2);               /* disable IBUSOCP,IBATOCP,THEM */
 	sm5440_write_reg(sm5440, SM5440_REG_CNTL3, 0xB8);			   /* disable CHGTMR */
 	sm5440_write_reg(sm5440, SM5440_REG_CNTL4, 0xFF);			   /* used DEB:8ms */
 	sm5440_write_reg(sm5440, SM5440_REG_CNTL6, 0x09);               /* forced PWM mode, disable ENHIZ */

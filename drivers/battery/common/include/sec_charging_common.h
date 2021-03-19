@@ -167,6 +167,7 @@ enum power_supply_ext_property {
 	POWER_SUPPLY_EXT_PROP_CHARGE_UNO_CONTROL,
 	POWER_SUPPLY_EXT_PROP_PROP_FILTER_CFG,
 	POWER_SUPPLY_EXT_PROP_ENABLE_HW_FACTORY_MODE,
+	POWER_SUPPLY_EXT_PROP_SRCCAP,
 };
 
 enum rx_device_type {
@@ -719,4 +720,7 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 
 #define is_pd_apdo_wire_type(cable_type) ( \
 	cable_type == SEC_BATTERY_CABLE_PDIC_APDO)
+
+#define is_pd_fpdo_wire_type(cable_type) ( \
+	cable_type == SEC_BATTERY_CABLE_PDIC)
 #endif /* __SEC_CHARGING_COMMON_H */

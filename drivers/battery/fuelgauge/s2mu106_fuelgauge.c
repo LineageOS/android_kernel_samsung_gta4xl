@@ -1811,6 +1811,8 @@ static int s2mu106_fg_get_property(struct power_supply *psy,
 			val->intval = s2mu106_get_rawsoc(fuelgauge);
 		} else if (val->intval == SEC_FUELGAUGE_CAPACITY_TYPE_CAPACITY_POINT) {
 			val->intval = fuelgauge->raw_capacity % 10;
+		} else if (val->intval == SEC_FUELGAUGE_CAPACITY_TYPE_DYNAMIC_SCALE) {
+			val->intval = fuelgauge->raw_capacity;
 		} else {
 			val->intval = s2mu106_get_rawsoc(fuelgauge) / 10;
 
@@ -2311,6 +2313,11 @@ static int s2mu106_fuelgauge_parse_dt(struct s2mu106_fuelgauge_data *fuelgauge)
 
 			pr_err("%s: [Long life] fuelgauge->fg_num_age_step %d \n",
 				__func__,fuelgauge->fg_num_age_step);
+
+			if ((sizeof(fg_age_data_info_t) * fuelgauge->fg_num_age_step) != len) {
+				pr_err("%s: The Long life variables and the data in device tree does not match\n", __func__);
+				BUG();
+			}
 
 			for(i=0 ; i < fuelgauge->fg_num_age_step ; i++){
 				pr_err("%s: [Long life] age_step = %d, table3[0] %d, table4[0] %d, batcap[0] %02x, accum[0] %02x, soc_arr[0] %d, ocv_arr[0] %d, volt_tun : %02x\n",

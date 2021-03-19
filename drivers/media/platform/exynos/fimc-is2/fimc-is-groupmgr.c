@@ -1756,6 +1756,7 @@ int fimc_is_group_open(struct fimc_is_groupmgr *groupmgr,
 	group->fcount = 0;
 	group->pcount = 0;
 	group->aeflashMode = 0; /* Flash Mode Control */
+	group->remainIntentCount = 0;
 	atomic_set(&group->scount, 0);
 	atomic_set(&group->rcount, 0);
 	atomic_set(&group->backup_fcount, 0);

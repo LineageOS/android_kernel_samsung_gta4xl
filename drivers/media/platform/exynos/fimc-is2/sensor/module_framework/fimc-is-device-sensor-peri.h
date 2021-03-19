@@ -244,6 +244,18 @@ struct fimc_is_ois {
 	struct work_struct		ois_set_init_work;
 };
 
+struct fimc_is_companion{
+	u32				id;
+	u32				device; /* connected sensor device */
+
+	struct v4l2_subdev		*subdev; /* connected module subdevice */
+	struct i2c_client		*client;
+
+	struct fimc_is_companion_ops	*companion_ops;
+	struct fimc_is_device_sensor_peri	*sensor_peri;
+	struct mutex				*i2c_lock;
+};
+
 struct fimc_is_mcu {
 	struct v4l2_subdev			*subdev; /* connected module subdevice */
 	struct i2c_client 			*client;
@@ -420,6 +432,9 @@ struct fimc_is_device_sensor_peri {
 	struct fimc_is_ois		*ois;
 	struct v4l2_subdev		*subdev_ois;
 
+	struct fimc_is_companion	*companion;
+	struct v4l2_subdev			*subdev_companion;
+
 	struct fimc_is_pdp		*pdp;
 	struct v4l2_subdev		*subdev_pdp;
 
@@ -541,6 +556,7 @@ int fimc_is_sensor_mode_change(struct fimc_is_cis *cis, u32 mode);
 void fimc_is_sensor_peri_init_work(struct fimc_is_device_sensor_peri *sensor_peri);
 
 #define CALL_CISOPS(s, op, args...) (((s)->cis_ops->op) ? ((s)->cis_ops->op(args)) : 0)
+#define CALL_COMPANIONOPS(s, op, args...) (((s)->companion_ops->op) ? ((s)->companion_ops->op(args)) : 0)
 #define CALL_PREPROPOPS(s, op, args...) (((s)->preprocessor_ops->op) ? ((s)->preprocessor_ops->op(args)) : 0)
 #define CALL_OISOPS(s, op, args...) (((s)->ois_ops->op) ? ((s)->ois_ops->op(args)) : 0)
 #define CALL_ACTUATOROPS(s, op, args...) (((s)->actuator_ops->op) ? ((s)->actuator_ops->op(args)) : 0)

@@ -573,6 +573,18 @@ static int parse_ois_data(struct exynos_platform_fimc_is_module *pdata, struct d
 	return 0;
 }
 
+static int parse_companion_data(struct exynos_platform_fimc_is_module *pdata, struct device_node *dnode)
+{
+	u32 temp;
+	char *pprop;
+
+	DT_READ_U32(dnode, "product_name", pdata->companion_product_name);
+	DT_READ_U32(dnode, "i2c_addr", pdata->companion_i2c_addr);
+	DT_READ_U32(dnode, "i2c_ch", pdata->companion_i2c_ch);
+
+	return 0;
+}
+
 static int parse_mcu_data(struct exynos_platform_fimc_is_module *pdata, struct device_node *dnode)
 {
 	u32 temp;
@@ -700,6 +712,7 @@ int fimc_is_module_parse_dt(struct device *dev,
 	struct device_node *flash_np;
 	struct device_node *preprocessor_np;
 	struct device_node *ois_np;
+	struct device_node *companion_np;
 	struct device_node *mcu_np;
 	struct device_node *aperture_np;
 	struct device_node *power_np;
@@ -773,6 +786,13 @@ int fimc_is_module_parse_dt(struct device *dev,
 		pdata->ois_product_name = OIS_NAME_NOTHING;
 	} else {
 		parse_ois_data(pdata, ois_np);
+	}
+
+	companion_np = of_find_node_by_name(dnode, "companion_chip");
+	if (!companion_np) {
+		pdata->companion_product_name = COMPANION_NAME_NOTHING;
+	} else {
+		parse_companion_data(pdata, companion_np);
 	}
 
 	mcu_np = of_find_node_by_name(dnode, "mcu");

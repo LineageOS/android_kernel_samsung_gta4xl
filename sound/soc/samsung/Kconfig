@@ -213,6 +213,22 @@ config SND_SOC_SAMSUNG_VOGUE_RT5665
         tristate "Audio support for RT5665 on VOGUE"
         select SND_SOC_RT5665
 
+config SND_SOC_SAMSUNG_VOGUE_CS47L15
+        tristate "Audio support for CS47L15 on VOGUE"
+        select MFD_MADERA
+        select MFD_MADERA_SPI
+        select MFD_CS47L15
+        select MADERA_IRQ
+        select MADERA_IRQ_CS47L15
+        select REGULATOR_ARIZONA_LDO1
+        select REGULATOR_ARIZONA_MICSUPP
+        select EXTCON_MADERA
+        select EXTCON_MADERA_INPUT_EVENT
+        select SND_SOC_CS47L15
+        select SND_SOC_MADERA
+        select SND_SOC_WM_ADSP
+        select GPIO_MADERA
+
 config SND_SOC_ARNDALE_RT5631_ALC5631
         tristate "Audio support for RT5631(ALC5631) on Arndale Board"
         depends on I2C

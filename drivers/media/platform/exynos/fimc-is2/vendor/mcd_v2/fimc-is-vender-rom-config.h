@@ -25,6 +25,8 @@
 #include "fimc-is-vender-rom-config_aas_v80.h"
 #elif defined(CONFIG_CAMERA_AAS_V50S)
 #include "fimc-is-vender-rom-config_aas_v50s.h"
+#elif defined(CONFIG_CAMERA_FXT_V41)
+#include "fimc-is-vender-rom-config_fxt_v41.h"
 #elif defined(CONFIG_CAMERA_MMS_V30S)
 #include "fimc-is-vender-rom-config_mms_v30s.h"
 #elif defined(CONFIG_CAMERA_MMS_V21)

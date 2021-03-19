@@ -1687,6 +1687,42 @@ config MFD_ARIZONA_SPI
 	  Support for the Cirrus Logic/Wolfson Microelectronics Arizona platform
 	  audio SoC core functionality controlled via SPI.
 
+config MFD_MADERA
+	bool
+
+config MFD_MADERA_I2C
+	bool "Cirrus Logic Madera codecs with I2C"
+	select REGMAP
+	select REGMAP_IRQ
+	select MFD_CORE
+	select REGMAP_I2C
+	select MFD_MADERA
+	select MADERA_IRQ
+	depends on I2C
+	help
+	  Support for the Cirrus Logic Madera platform audio SoC
+	  core functionality controlled via I2C.
+
+config MFD_MADERA_SPI
+	bool "Cirrus Logic Madera codecs with SPI"
+	select REGMAP
+	select REGMAP_IRQ
+	select MFD_CORE
+	select REGMAP_SPI
+	select MFD_MADERA
+	select MADERA_IRQ
+	depends on SPI_MASTER
+	help
+	  Support for the Cirrus Logic Madera platform audio SoC
+	  core functionality controlled via SPI.
+
+config MFD_CS47L15
+	bool "Cirrus Logic CS47L15"
+	select PINCTRL_CS47L15
+	depends on MFD_MADERA
+	help
+	  Support for Cirrus Logic CS47L15 Smart Codec
+
 config MFD_CS47L24
 	bool "Cirrus Logic CS47L24 and WM1831"
 	depends on MFD_ARIZONA

@@ -318,6 +318,7 @@ enum fimc_is_sensor_state {
 	FIMC_IS_SENSOR_ITF_REGISTER,	/* to check whether sensor interfaces are registered */
 	FIMC_IS_SENSOR_WAIT_STREAMING,
 	SENSOR_MODULE_GOT_INTO_TROUBLE,
+	IS_SENSOR_S_POWER,
 };
 
 enum sensor_subdev_internel_use {
@@ -412,6 +413,8 @@ struct fimc_is_device_sensor {
 	struct fimc_is_flash				*flash;
 	struct v4l2_subdev				*subdev_ois;
 	struct fimc_is_ois				*ois;
+	struct v4l2_subdev				*subdev_companion;
+	struct fimc_is_companion			*companion;
 	struct v4l2_subdev				*subdev_mcu;
 	struct fimc_is_mcu				*mcu;
 	struct v4l2_subdev				*subdev_aperture;

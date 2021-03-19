@@ -165,6 +165,9 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 	struct v4l2_subdev *subdev_flash = NULL;
 	struct v4l2_subdev *subdev_aperture = NULL;
 	struct v4l2_subdev *subdev_ois = NULL;
+#ifdef SUPPORT_COMPANION_CHIP
+	struct v4l2_subdev *subdev_companion = NULL;
+#endif
 	struct fimc_is_preprocessor *preprocessor = NULL;
 	struct v4l2_subdev *subdev_preprocessor = NULL;
 	struct fimc_is_device_sensor *device = NULL;
@@ -244,6 +247,16 @@ int sensor_module_init(struct v4l2_subdev *subdev, u32 val)
 		goto p_err;
 	}
 
+#ifdef SUPPORT_COMPANION_CHIP
+	subdev_companion = sensor_peri->subdev_companion;
+	if (subdev_companion) {
+		ret = CALL_COMPANIONOPS(sensor_peri->companion, companion_init, subdev_companion);
+		if (ret) {
+			err("v4l2_subdev_call(companion_init) is fail(%d)", ret);
+			goto p_err;
+		}
+	}
+#endif
 	/* set initial ae setting if initial_ae feature is supported */
 	ret = CALL_CISOPS(&sensor_peri->cis, cis_set_initial_exposure, subdev_cis);
 	if (ret) {
@@ -386,6 +399,14 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 	}
 #endif
 
+#ifdef SUPPORT_COMPANION_CHIP
+	if (sensor_peri->subdev_companion != NULL) {
+		ret = CALL_COMPANIONOPS(sensor_peri->companion, companion_deinit, sensor_peri->subdev_companion);
+		if (ret < 0) {
+			err("v4l2_subdev_call(companion_deinit) is fail(%d)", ret);
+		}
+	}
+#endif
 	if (sensor_peri->flash != NULL) {
 		sensor_peri->flash->flash_data.mode = CAM2_FLASH_MODE_OFF;
 		if (sensor_peri->flash->flash_data.flash_fired == true) {
@@ -394,9 +415,11 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 				err("failed to turn off flash at flash expired handler\n");
 			}
 #if defined(CONFIG_LEDS_S2MU106_FLASH)
-			pdo_ctrl_by_flash(0);
-			muic_afc_set_voltage(9);
-			info("[%s]%d Down Volatge set Clear \n" ,__func__,__LINE__);
+			if (sensor_peri->flash->id == FLADRV_NAME_S2MU106) {
+				pdo_ctrl_by_flash(0);
+				muic_afc_set_voltage(9);
+				info("[%s]%d Down Volatge set Clear \n" ,__func__,__LINE__);
+			}
 #endif
 		}
 	}
@@ -421,6 +444,7 @@ int sensor_module_deinit(struct v4l2_subdev *subdev)
 	clear_bit(FIMC_IS_SENSOR_ACTUATOR_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_FLASH_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_OIS_AVAILABLE, &sensor_peri->peri_state);
+	clear_bit(FIMC_IS_SENSOR_COMPANION_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_APERTURE_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_PDP_AVAILABLE, &sensor_peri->peri_state);
 

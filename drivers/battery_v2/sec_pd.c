@@ -13,14 +13,17 @@
  */
 
 #include <linux/notifier.h>
+
 #if defined(CONFIG_BATTERY_NOTIFIER)
 #include <linux/battery/battery_notifier.h>
 #endif
 
 struct pdic_notifier_struct pd_noti;
+
 void (*fp_select_pdo)(int num);
 int (*fp_sec_pd_select_pps)(int num, int ppsVol, int ppsCur);
-int (*fp_sec_pd_get_apdo_max_current)(unsigned int *pdo_pos, unsigned int taMaxVol, unsigned int *taMaxCur);
+int (*fp_sec_pd_get_apdo_max_power)(unsigned int *pdo_pos, unsigned int *taMaxVol, unsigned int *taMaxCur, unsigned int *taMaxPwr);
+int (*fp_pps_enable)(int num, int ppsVol, int ppsCur, int enable);
 
 void select_pdo(int num)
 {
@@ -36,10 +39,18 @@ int sec_pd_select_pps(int num, int ppsVol, int ppsCur)
 	return 0;
 }
 
-int sec_pd_get_apdo_max_current(unsigned int *pdo_pos, unsigned int taMaxVol, unsigned int *taMaxCur)
+int sec_pps_enable(int num, int ppsVol, int ppsCur, int enable)
 {
-	if (fp_sec_pd_get_apdo_max_current)
-		return fp_sec_pd_get_apdo_max_current(pdo_pos, taMaxVol, taMaxCur);
+	if (fp_pps_enable)
+		return fp_pps_enable(num, ppsVol, ppsCur, enable);
+
+	return 0;
+}
+
+int sec_pd_get_apdo_max_power(unsigned int *pdo_pos, unsigned int *taMaxVol, unsigned int *taMaxCur, unsigned int *taMaxPwr)
+{
+	if (fp_sec_pd_get_apdo_max_power)
+		return fp_sec_pd_get_apdo_max_power(pdo_pos, taMaxVol, taMaxCur, taMaxPwr);
 
 	return -ENOTSUPP;
 }

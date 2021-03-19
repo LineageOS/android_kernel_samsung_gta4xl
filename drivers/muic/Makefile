@@ -2,11 +2,8 @@
 # Makefile for muic devices
 #
 
-ifeq ($(CONFIG_MUIC_S2MU106),y)
-	obj-$(CONFIG_MUIC_CORE)	+= muic_core.o
-else
-	obj-y					+= muic-core.o
-endif
+obj-y		+= muic-core.o
+obj-$(CONFIG_MUIC_CORE)	+= muic_core.o
 obj-$(CONFIG_MUIC_NOTIFIER)		+= muic_notifier.o
 obj-$(CONFIG_MUIC_MANAGER)		+= muic_manager.o
 obj-$(CONFIG_MUIC_SYSFS)		+= muic_sysfs.o

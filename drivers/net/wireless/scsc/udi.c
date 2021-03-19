@@ -159,7 +159,7 @@ int slsi_kernel_to_user_space_event(struct slsi_log_client *log_client, u16 even
 	/* udi_log_event takes a copy, so ensure that the skb allocated in this
 	 * function is freed again.
 	 */
-	slsi_kfree_skb(skb);
+	kfree_skb(skb);
 	return ret;
 }
 
@@ -207,7 +207,7 @@ static int slsi_cdev_open(struct inode *inode, struct file *file)
 	file->private_data = client;
 	slsi_procfs_inc_node();
 
-#ifdef CONFIG_SCSC_MXLOGGER
+#if IS_ENABLED(CONFIG_SCSC_MXLOGGER)
 	scsc_service_register_observer(NULL, "udi");
 #endif
 
@@ -252,7 +252,7 @@ static int slsi_cdev_release(struct inode *inode, struct file *filp)
 	if (client->log_enabled)
 		slsi_log_client_unregister(client->ufcdev->sdev, client);
 
-	slsi_skb_queue_purge(&client->log_list);
+	skb_queue_purge(&client->log_list);
 
 	slsi_fw_test_deinit(uf_cdev->sdev, &client->fw_test);
 	uf_cdev->client[indx] = NULL;
@@ -261,7 +261,7 @@ static int slsi_cdev_release(struct inode *inode, struct file *filp)
 	kfree(client);
 	slsi_procfs_dec_node();
 
-#ifdef CONFIG_SCSC_MXLOGGER
+#if IS_ENABLED(CONFIG_SCSC_MXLOGGER)
 	scsc_service_unregister_observer(NULL, "udi");
 #endif
 
@@ -299,7 +299,7 @@ static ssize_t slsi_cdev_read(struct file *filp, char *p, size_t len, loff_t *po
 		return -EINVAL;
 	}
 
-	skb = slsi_skb_dequeue(&client->log_list);
+	skb = skb_dequeue(&client->log_list);
 	if (!skb) {
 		SLSI_ERR(sdev, "No Data\n");
 		return -EINVAL;
@@ -315,11 +315,11 @@ static ssize_t slsi_cdev_read(struct file *filp, char *p, size_t len, loff_t *po
 
 	if (copy_to_user(p, skb->data, msglen)) {
 		SLSI_ERR(sdev, "Failed to copy UDI log to user\n");
-		slsi_kfree_skb(skb);
+		kfree_skb(skb);
 		return -EFAULT;
 	}
 
-	slsi_kfree_skb(skb);
+	kfree_skb(skb);
 	return msglen;
 }
 
@@ -349,27 +349,23 @@ static ssize_t slsi_cdev_write(struct file *filp, const char *p, size_t len, lof
 		SLSI_ERR_NODEV("sdev not set\n");
 		return -EINVAL;
 	}
-	skb = slsi_alloc_skb_headroom(len, GFP_KERNEL);
+	skb = alloc_skb(SLSI_NETIF_SKB_HEADROOM + SLSI_NETIF_SKB_TAILROOM + len, GFP_KERNEL);
+	if (!skb) {
+		SLSI_WARN_NODEV("error allocating skb (len: %d)\n", len);
+		return -ENOMEM;
+	}
+
+	skb_reserve(skb, SLSI_NETIF_SKB_HEADROOM - SLSI_SKB_GET_ALIGNMENT_OFFSET(skb));
 	data = skb_put(skb, len);
 	if (copy_from_user(data, p, len)) {
 		SLSI_ERR(sdev, "copy from user failed\n");
-		slsi_kfree_skb(skb);
+		kfree_skb(skb);
 		return -EFAULT;
 	}
 
 	cb = slsi_skb_cb_init(skb);
 	cb->sig_length = fapi_get_expected_size(skb);
 	cb->data_length = skb->len;
-	/* colour is defined as: */
-	/* u16 register bits:
-	 * 0      - do not use
-	 * [2:1]  - vif
-	 * [7:3]  - peer_index
-	 * [10:8] - ac queue
-	 */
-	if (fapi_is_ma(skb))
-		cb->colour = (slsi_frame_priority_to_ac_queue(skb->priority) << 8) |
-			(fapi_get_u16(skb, u.ma_unitdata_req.peer_index) << 3) |  (fapi_get_u16(skb, u.ma_unitdata_req.vif) << 1);
 
 	/* F/w will panic if fw_reference is not zero. */
 	fapi_set_u32(skb, fw_reference, 0);
@@ -393,15 +389,15 @@ static ssize_t slsi_cdev_write(struct file *filp, const char *p, size_t len, lof
 			slsi_fw_test_signal(sdev, &client->fw_test, skb);
 		if (fapi_is_ma(skb)) {
 			if (slsi_tx_data_lower(sdev, skb)) {
-				slsi_kfree_skb(skb);
+				kfree_skb(skb);
 				return -EINVAL;
 			}
 		} else if (slsi_tx_control(sdev, NULL, skb)) {
-			slsi_kfree_skb(skb);
+			kfree_skb(skb);
 			return -EINVAL;
 		}
 	} else if (slsi_hip_rx(sdev, skb)) {
-		slsi_kfree_skb(skb);
+		kfree_skb(skb);
 		return -EINVAL;
 	}
 
@@ -423,7 +419,7 @@ static long slsi_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 		return -EINVAL;
 	sdev = client->ufcdev->sdev;
 
-	slsi_wakelock(&sdev->wlan_wl);
+	slsi_wake_lock(&sdev->wlan_wl);
 
 	switch (cmd) {
 	case UNIFI_GET_UDI_ENABLE:
@@ -557,6 +553,11 @@ static long slsi_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 		}
 
 		mib_data = kmalloc(mib_data_size, GFP_KERNEL);
+		if (!mib_data) {
+			SLSI_ERR(sdev, "UNIFI_SET_MIB: Failed to allocate memory for mib_data\n");
+			r = -ENOMEM;
+			break;
+		}
 
 		/* Read the rest of the Mib Data */
 		if (copy_from_user((void *)mib_data, (void *)(arg + 10), mib_data_length)) {
@@ -620,7 +621,11 @@ static long slsi_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 		}
 
 		mib_data = kmalloc(mib_data_size, GFP_KERNEL);
-
+		if (!mib_data) {
+			SLSI_ERR(sdev, "UNIFI_GET_MIB: Failed to allocate memory for mib_data\n");
+			r = -ENOMEM;
+			break;
+		}
 		/* Read the rest of the Mib Data */
 		if (copy_from_user((void *)mib_data, (void *)(arg + 10), mib_data_length)) {
 			SLSI_ERR(sdev, "UNIFI_GET_MIB: Failed to copy in mib_data\n");
@@ -715,7 +720,7 @@ static long slsi_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long a
 		r = -EINVAL;
 	}
 
-	slsi_wakeunlock(&sdev->wlan_wl);
+	slsi_wake_unlock(&sdev->wlan_wl);
 	return r;
 }
 
@@ -965,7 +970,7 @@ allow_config_frame:
 		skb_copy_bits(skb, 0, skb_put(skb2, client->ma_unitdata_size_limit), client->ma_unitdata_size_limit);
 		skb = skb2;
 	} else {
-		skb = slsi_skb_copy_expand(skb, sizeof(msg), 0, GFP_ATOMIC);
+		skb = skb_copy_expand(skb, sizeof(msg), 0, GFP_ATOMIC);
 		if (WARN_ON(!skb))
 			return -ENOMEM;
 	}
@@ -978,7 +983,7 @@ allow_config_frame:
 	msg_skb = (struct udi_msg_t *)skb_push(skb, sizeof(msg));
 	*msg_skb = msg;
 
-	slsi_skb_queue_tail(&client->log_list, skb);
+	skb_queue_tail(&client->log_list, skb);
 
 	/* Wake any waiting user process */
 	wake_up_interruptible(&client->log_wq);
@@ -1029,14 +1034,14 @@ static int slsi_cdev_create(struct slsi_dev *sdev, struct device *parent)
 		struct slsi_test_dev *uftestdev = (struct slsi_test_dev *)sdev->maxwell_core;
 
 		minor = uftestdev->device_minor_number;
-		if (uf_cdevs[minor])
+		if (minor >= 0 && minor < SLSI_UDI_MINOR_NODES && uf_cdevs[minor])
 			return -EINVAL;
 	}
 #else
 	minor = slsi_get_minor();
 #endif
-	if (minor < 0) {
-		SLSI_ERR(sdev, "no minor numbers available\n");
+	if (minor >= SLSI_UDI_MINOR_NODES || minor < 0) {
+		SLSI_ERR(sdev, "no minor numbers available,minor:%d\n", minor);
 		return -ENOMEM;
 	}
 

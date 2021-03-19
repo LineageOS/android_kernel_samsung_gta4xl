@@ -30,7 +30,7 @@
 
 #include <linux/extcon/extcon-madera.h>
 #include <linux/extcon/extcon-madera-pdata.h>
-#include <dt-bindings/extcon/madera.h>
+#include <dt-bindings/extcon/extcon-madera.h>
 
 #include <linux/mfd/madera/core.h>
 #include <linux/mfd/madera/pdata.h>

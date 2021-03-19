@@ -6,6 +6,11 @@
 #include "dev.h"
 #include "reg_info.h"
 #include "debug.h"
+#include <linux/fs.h>
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 
 void slsi_regd_init(struct slsi_dev *sdev)
 {
@@ -21,8 +26,8 @@ void slsi_regd_init(struct slsi_dev *sdev)
 		REG_RULE(5180 - 10, 5240 + 10, 80, 0, 20, 0),
 		/* Channel 52 - 64 */
 		REG_RULE(5260 - 10, 5320 + 10, 80, 0, 20, NL80211_RRF_DFS),
-		/* Channel 100 - 140 */
-		REG_RULE(5500 - 10, 5700 + 10, 80, 0, 20, NL80211_RRF_DFS),
+		/* Channel 100 - 144 */
+		REG_RULE(5500 - 10, 5720 + 10, 80, 0, 20, NL80211_RRF_DFS),
 		/* Channel 149 - 165 */
 		REG_RULE(5745 - 10, 5825 + 10, 80, 0, 20, 0),
 	};
@@ -60,6 +65,7 @@ void  slsi_regd_deinit(struct slsi_dev *sdev)
 
 int slsi_read_regulatory(struct slsi_dev *sdev)
 {
+#ifdef SCSC_SEP_VERSION
 	struct file *fptr = NULL;
 	char *reg_file_t = "/vendor/etc/wifi/slsi_reg_database.bin";
 	int i = 0, j = 0, index = 0;
@@ -213,4 +219,7 @@ exit:
 	sdev->regdb.regdb_state = SLSI_REG_DB_ERROR;
 	filp_close(fptr, NULL);
 	return -EINVAL;
+#else
+	return -EOPNOTSUPP;
+#endif
 }

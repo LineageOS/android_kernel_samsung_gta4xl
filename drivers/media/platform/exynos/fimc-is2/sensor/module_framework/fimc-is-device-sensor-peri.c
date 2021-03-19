@@ -492,11 +492,30 @@ void fimc_is_sensor_mode_change_work_fn(struct kthread_work *work)
 {
 	struct fimc_is_device_sensor_peri *sensor_peri;
 	struct fimc_is_cis *cis;
+#ifdef SUPPORT_COMPANION_CHIP
+	struct fimc_is_companion *companion = NULL;
+#endif
 
 	TIME_LAUNCH_STR(LAUNCH_SENSOR_INIT);
 	sensor_peri = container_of(work, struct fimc_is_device_sensor_peri, mode_change_work);
 
 	cis = (struct fimc_is_cis *)v4l2_get_subdevdata(sensor_peri->subdev_cis);
+
+#ifdef SUPPORT_COMPANION_CHIP
+	if(sensor_peri->subdev_companion) {
+		companion = (struct fimc_is_companion *)v4l2_get_subdevdata(sensor_peri->subdev_companion);
+	}
+	/* companion global setting is only set to first mode change time */
+	if (sensor_peri->mode_change_first == true) {
+		if (companion && companion->companion_ops) {
+			CALL_COMPANIONOPS(companion, companion_set_global_setting, companion->subdev);
+		}
+	}
+
+	if (companion && companion->companion_ops) {
+		CALL_COMPANIONOPS(companion, companion_mode_change, companion->subdev, cis->cis_data->sens_config_index_cur);
+	}
+#endif
 
 	/* cis global setting is only set to first mode change time */
 	if (sensor_peri->mode_change_first == true) {
@@ -835,9 +854,11 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 				if (ret) {
 					err("failed to turn off flash at flash expired handler\n");
 #ifdef CONFIG_LEDS_S2MU106_FLASH
-					pdo_ctrl_by_flash(0);
-					muic_afc_set_voltage(9);
-					info("[%s](%d) MAIN Flash ERR: Power Down set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+					if (flash->id == FLADRV_NAME_S2MU106) {
+						pdo_ctrl_by_flash(0);
+						muic_afc_set_voltage(9);
+						info("[%s](%d) MAIN Flash ERR: Power Down set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+					}
 #endif
 				}
 			} else {
@@ -864,9 +885,11 @@ void fimc_is_sensor_flash_fire_work(struct work_struct *data)
 			}
 
 #ifdef CONFIG_LEDS_S2MU106_FLASH
-			pdo_ctrl_by_flash(0);
-			muic_afc_set_voltage(9);
-			info("[%s](%d) MAIN Flash OFF: Power Down set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+			if (flash->id == FLADRV_NAME_S2MU106) {
+				pdo_ctrl_by_flash(0);
+				muic_afc_set_voltage(9);
+				info("[%s](%d) MAIN Flash OFF: Power Down set Clear(5V -> 9V).\n" ,__func__,__LINE__);
+			}
 #endif
 			flash->flash_ae.main_fls_ae_reset = false;
 			flash->flash_ae.main_fls_strm_on_off_step = 0;
@@ -1474,14 +1497,16 @@ int fimc_is_sensor_peri_pre_flash_fire(struct v4l2_subdev *subdev, void *arg)
 		flash->flash_data.intensity = flash_uctl->firingPower;
 		flash->flash_data.firing_time_us = flash_uctl->firingTime;
 
-#ifdef CONFIG_LEDS_S2MU106_FLASH
-		schedule_work(&sensor_peri->flash->flash_data.muic_ctrl_and_flash_fire_work);
-#else
-		info("[%s](%d) pre-flash mode(%d), pow(%d), time(%d)\n", __func__,
-			vsync_count, flash->flash_data.mode,
-			flash->flash_data.intensity, flash->flash_data.firing_time_us);
-		ret = fimc_is_sensor_flash_fire(sensor_peri, flash->flash_data.intensity);
-#endif
+		if (sensor_peri->flash->id == FLADRV_NAME_S2MU106) {
+			schedule_work(&sensor_peri->flash->flash_data.muic_ctrl_and_flash_fire_work);
+		} else {
+			info("[%s](%d) pre-flash mode(%d), pow(%d), time(%d)\n", __func__,
+					vsync_count, flash->flash_data.mode,
+					flash->flash_data.intensity, flash->flash_data.firing_time_us);
+
+			ret = fimc_is_sensor_flash_fire(sensor_peri, flash->flash_data.intensity);
+		}
+
 	}
 
 	/* HACK: reset uctl */
@@ -1815,6 +1840,7 @@ void fimc_is_sensor_peri_probe(struct fimc_is_device_sensor_peri *sensor_peri)
 	clear_bit(FIMC_IS_SENSOR_FLASH_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_PREPROCESSOR_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_OIS_AVAILABLE, &sensor_peri->peri_state);
+	clear_bit(FIMC_IS_SENSOR_COMPANION_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_APERTURE_AVAILABLE, &sensor_peri->peri_state);
 	clear_bit(FIMC_IS_SENSOR_PDP_AVAILABLE, &sensor_peri->peri_state);
 
@@ -2045,9 +2071,11 @@ int fimc_is_sensor_peri_s_stream(struct fimc_is_device_sensor *device,
 				sensor_peri->flash->flash_ae.pre_fls_ae_reset = false;
 				sensor_peri->flash->flash_ae.frm_num_pre_fls = 0;
 #if defined(CONFIG_LEDS_S2MU106_FLASH)
-				pdo_ctrl_by_flash(0);
-				muic_afc_set_voltage(9);
-				info("[%s]%d Down Voltage set Clear \n" ,__func__,__LINE__);
+				if (sensor_peri->flash->id == FLADRV_NAME_S2MU106) {
+					pdo_ctrl_by_flash(0);
+					muic_afc_set_voltage(9);
+					info("[%s]%d Down Voltage set Clear \n" ,__func__,__LINE__);
+				}
 #endif
 			}
 			mutex_unlock(&cis->control_lock);
@@ -2264,8 +2292,8 @@ static int fimc_is_sensor_peri_s_3hdr_mode(struct fimc_is_device_sensor *device,
 			mode_change->width, mode_change->height, mode_change->fps);
 	}
 
-	device->cfg = NULL;
 	device->ex_mode = mode_change->ex_mode;
+	clear_bit(FIMC_IS_SENSOR_S_CONFIG, &device->state);
 
 	cfg = fimc_is_sensor_g_mode(device);
 	device->cfg = cfg;
@@ -2274,6 +2302,7 @@ static int fimc_is_sensor_peri_s_3hdr_mode(struct fimc_is_device_sensor *device,
 		ret = -EINVAL;
 		goto p_err;
 	}
+	set_bit(FIMC_IS_SENSOR_S_CONFIG, &device->state);
 
 	sensor_peri->cis.cis_data->sens_config_index_cur = device->cfg->mode;
 

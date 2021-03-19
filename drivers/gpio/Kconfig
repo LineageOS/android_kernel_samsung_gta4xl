@@ -987,6 +987,12 @@ config GPIO_LP87565
 	  This driver can also be built as a module. If so, the module will be
 	  called gpio-lp87565.
 
+config GPIO_MADERA
+	bool "Cirrus Logic Madera class codecs"
+	depends on PINCTRL_MADERA
+	help
+	  Support for GPIOs on Cirrus Logic Madera class codecs.
+
 config GPIO_MAX77620
 	tristate "GPIO support for PMIC MAX77620 and MAX20024"
 	depends on MFD_MAX77620
@@ -1299,14 +1305,5 @@ config GPIO_VIPERBOARD
           of the module parameters.
 
 endmenu
-
-config SEC_CONNECTOR_DETECTOR
-	tristate "Setting Samsung Connector Detector feature"
-	depends on SEC_FACTORY
-	help
-	  To detect connection of sub connector
-	  This feature should be enabled for factory mode
-	  This can be used for CAM, SUB
-          Set this feature for problem detection.
 
 endif

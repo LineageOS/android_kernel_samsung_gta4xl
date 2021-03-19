@@ -937,10 +937,8 @@ static int nvt_ts_check_chip_ver_trim(struct nvt_ts_data *ts)
 	return -ENODEV;
 }
 
-static int nvt_ts_input_open(struct input_dev *dev)
+static int nvt_ts_open(struct nvt_ts_data *ts)
 {
-	struct nvt_ts_data *ts = input_get_drvdata(dev);
-
 	input_info(true, &ts->client->dev, "%s\n", __func__);
 
 	if (ts->power_status == POWER_ON_STATUS) {
@@ -969,13 +967,6 @@ static int nvt_ts_input_open(struct input_dev *dev)
 	ts->print_info_cnt_open = 0;
 	ts->print_info_cnt_release = 0;
 	schedule_work(&ts->work_print_info.work);
-
-	return 0;
-}
-
-static int nvt_ts_open(struct nvt_ts_data *ts)
-{
-	input_info(true, &ts->client->dev, "%s\n", __func__);
 
 	return 0;
 }
@@ -1025,6 +1016,13 @@ static void nvt_ts_close(struct nvt_ts_data *ts)
 	mutex_unlock(&ts->lock);
 
 	input_info(true, &ts->client->dev, "%s", __func__);
+}
+
+static void nvt_ts_open_work(struct kthread_work *work)
+{
+	struct nvt_ts_data *ts = container_of(work, struct nvt_ts_data, kwork);
+
+	nvt_ts_open(ts);
 }
 
 static void nvt_ts_set_input_value(struct nvt_ts_data *ts, struct input_dev *input_dev)
@@ -1095,7 +1093,7 @@ static int fb_notifier_cb(struct notifier_block *nb, unsigned long event, void *
 			nvt_ts_close(ts);
 	} else if (event == FB_EVENT_BLANK) {
 		if (*blank == FB_BLANK_UNBLANK)
-			nvt_ts_open(ts);
+			kthread_queue_work(&ts->kworker, &ts->kwork);
 	}
 
 	return 0;
@@ -1246,6 +1244,7 @@ static int nvt_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	struct nvt_ts_data *ts;
 	struct nvt_ts_platdata *platdata = dev_get_platdata(&client->dev);
 	struct input_dev *input_dev;
+	struct task_struct *kworker_task;
 	int ret;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
@@ -1281,6 +1280,15 @@ static int nvt_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	INIT_DELAYED_WORK(&ts->work_print_info, nvt_ts_print_info_work);
 
+	kthread_init_worker(&ts->kworker);
+	kworker_task = kthread_run(kthread_worker_fn,
+		   &ts->kworker, "sec_touchscreen");
+	if (IS_ERR(kworker_task)) {
+		input_err(true, &client->dev, "Failed to create resume thread\n");
+		goto err_kthread;
+	}
+	kthread_init_work(&ts->kwork, nvt_ts_open_work);
+
 	ts->power_status = POWER_ON_STATUS;
 
 	/* need 10ms delay after POR(power on reset) */
@@ -1311,8 +1319,6 @@ static int nvt_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 		input_err(true, &client->dev, "failed to register input device\n");
 		goto err_input_regi_dev;
 	}
-
-	ts->input_dev->open = nvt_ts_input_open;
 
 	ts->sec_function = nvt_ts_mode_read(ts);
 	input_info(true, &ts->client->dev, "%s: default func mode 0x%04X\n", __func__, ts->sec_function);
@@ -1364,7 +1370,7 @@ static int nvt_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 #endif
 
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-	//nvt_ts_flash_proc_init(ts);
+	nvt_ts_flash_proc_init(ts);
 #endif
 
 	schedule_delayed_work(&ts->work_print_info, msecs_to_jiffies(50));
@@ -1388,6 +1394,7 @@ err_regi_irq:
 err_input_regi_dev:
 err_fw_update:
 err_check_trim:
+err_kthread:
 	mutex_destroy(&ts->lock);
 	mutex_destroy(&ts->i2c_mutex);
 

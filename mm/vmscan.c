@@ -1375,7 +1375,7 @@ free_it:
 		 * NR_ISOLATED_ANON + x on freed pages in here.
 		 */
 		if (!pgdat)
-			dec_zone_page_state(page, NR_ISOLATED_ANON +
+			dec_node_page_state(page, NR_ISOLATED_ANON +
 					page_is_file_cache(page));
 		continue;
 
@@ -1482,7 +1482,7 @@ unsigned long reclaim_pages_from_list(struct list_head *page_list,
 	while (!list_empty(page_list)) {
 		page = lru_to_page(page_list);
 		list_del(&page->lru);
-		dec_zone_page_state(page, NR_ISOLATED_ANON +
+		dec_node_page_state(page, NR_ISOLATED_ANON +
 				page_is_file_cache(page));
 		putback_lru_page(page);
 	}
@@ -2387,7 +2387,7 @@ static inline bool mem_boost_pgdat_wmark(struct pglist_data *pgdat)
 	return false;
 }
 
-#define MEM_BOOST_THRESHOLD ((600 * 1024 * 1024) / (PAGE_SIZE))
+#define MEM_BOOST_THRESHOLD ((300 * 1024 * 1024) / (PAGE_SIZE))
 inline bool need_memory_boosting(struct pglist_data *pgdat)
 {
 	bool ret;
@@ -2745,7 +2745,10 @@ static void shrink_node_memcg(struct pglist_data *pgdat, struct mem_cgroup *memc
 	}
 	blk_finish_plug(&plug);
 	sc->nr_reclaimed += nr_reclaimed;
-
+	
+	if (need_memory_boosting(NULL))
+		return;
+	
 	/*
 	 * Even if we did not try to evict anon pages at all, we want to
 	 * rebalance the anon lru active/inactive ratio.

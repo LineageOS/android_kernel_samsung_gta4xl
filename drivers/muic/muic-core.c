@@ -53,7 +53,7 @@
 #endif
 
 #ifdef CONFIG_SWITCH
-static struct switch_dev switch_dock = {
+struct switch_dev switch_dock = {
 	.name = "dock",
 };
 
@@ -90,7 +90,7 @@ void muic_send_attached_muic_cable_intent(int type)
 }
 #endif
 
-static int muic_dock_attach_notify(int type, const char *name)
+int muic_dock_attach_notify(int type, const char *name)
 {
 	pr_info("%s: %s\n", __func__, name);
 	muic_send_dock_intent(type);
@@ -98,7 +98,7 @@ static int muic_dock_attach_notify(int type, const char *name)
 	return NOTIFY_OK;
 }
 
-static int muic_dock_detach_notify(void)
+int muic_dock_detach_notify(void)
 {
 	pr_info("%s\n", __func__);
 	muic_send_dock_intent(MUIC_DOCK_DETACHED);
@@ -106,7 +106,7 @@ static int muic_dock_detach_notify(void)
 	return NOTIFY_OK;
 }
 
-static int muic_handle_dock_notification(struct notifier_block *nb,
+int muic_handle_dock_notification(struct notifier_block *nb,
 			unsigned long action, void *data)
 {
 #if defined(CONFIG_CCIC_NOTIFIER) && defined(CONFIG_MUIC_SUPPORT_CCIC)
@@ -193,7 +193,7 @@ static int muic_handle_dock_notification(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-static int muic_handle_cable_data_notification(struct notifier_block *nb,
+int muic_handle_cable_data_notification(struct notifier_block *nb,
 			unsigned long action, void *data)
 {
 #if defined(CONFIG_CCIC_NOTIFIER) && defined(CONFIG_MUIC_SUPPORT_CCIC)
@@ -297,7 +297,7 @@ err:
 }
 #endif /* CONFIG_USE_SAFEOUT */
 
-static void muic_init_switch_dev_cb(void)
+void muic_init_switch_dev_cb(void)
 {
 #ifdef CONFIG_SWITCH
 	int ret;
@@ -339,7 +339,7 @@ static void muic_init_switch_dev_cb(void)
 	pr_info("%s: done\n", __func__);
 }
 
-static void muic_cleanup_switch_dev_cb(void)
+void muic_cleanup_switch_dev_cb(void)
 {
 #ifdef CONFIG_SWITCH
 #ifdef CONFIG_SEC_FACTORY
@@ -359,8 +359,6 @@ static void muic_cleanup_switch_dev_cb(void)
 	pr_info("%s: done\n", __func__);
 }
 
-extern struct muic_platform_data muic_pdata;
-
 /* func : set_switch_sel
  * switch_sel value get from bootloader comand line
  * switch_sel data consist 8 bits (xxxxyyyyzzzz)
@@ -368,7 +366,7 @@ extern struct muic_platform_data muic_pdata;
  * next 4bits(yyyy) mean if pmic version info
  * next 4bits(xxxx) mean afc disable info
  */
-static int set_switch_sel(char *str)
+int set_switch_sel(char *str)
 {
 	get_option(&str, &muic_pdata.switch_sel);
 	muic_pdata.switch_sel = (muic_pdata.switch_sel) & 0xfff;
@@ -389,7 +387,7 @@ int get_switch_sel(void)
  *   0x30 : Enabled
  */
 static int afc_mode = 0;
-static int __init set_afc_mode(char *str)
+int __init set_afc_mode(char *str)
 {
 	int mode;
 	get_option(&str, &mode);
@@ -413,7 +411,7 @@ static int __ccic_info;
  *              no ccic Noti. registration is needed
  *              even though a ccic chip is present.
  */
-static int set_ccic_info(char *str)
+int set_ccic_info(char *str)
 {
 	get_option(&str, &__ccic_info);
 
@@ -448,7 +446,7 @@ bool is_muic_usb_path_cp_usb(void)
 	return false;
 }
 
-static int muic_init_gpio_cb(int switch_sel)
+int muic_init_gpio_cb(void *data, int switch_sel)
 {
 	struct muic_platform_data *pdata = &muic_pdata;
 	const char *usb_mode;
@@ -496,6 +494,18 @@ int muic_afc_set_voltage(int voltage)
 
 	if (pdata && pdata->muic_afc_set_voltage_cb)
 		return pdata->muic_afc_set_voltage_cb(voltage);
+
+	pr_err("%s: cannot supported\n", __func__);
+	return -ENODEV;
+}
+
+int muic_afc_get_voltage(void)
+
+{
+	struct muic_platform_data *pdata = &muic_pdata;
+
+	if (pdata && pdata->muic_afc_get_voltage_cb)
+		return pdata->muic_afc_get_voltage_cb();
 
 	pr_err("%s: cannot supported\n", __func__);
 	return -ENODEV;

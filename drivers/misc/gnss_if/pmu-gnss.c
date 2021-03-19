@@ -240,7 +240,9 @@ static int gnss_pmu_release_reset(void)
 #endif
 
 #ifdef CONFIG_GNSS_PMUCAL
-	cal_gnss_reset_release();
+	ret = cal_gnss_reset_release();
+	if (ret)
+		return -EINVAL;
 #else
 	gnss_pmu_read(EXYNOS_PMU_GNSS_CTRL_NS, &gnss_ctrl);
 	if (!(gnss_ctrl & GNSS_PWRON)) {

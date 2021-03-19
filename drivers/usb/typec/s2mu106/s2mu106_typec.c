@@ -66,6 +66,9 @@ extern struct pdic_notifier_struct pd_noti;
 #if defined(CONFIG_CCIC_NOTIFIER)
 extern struct device *ccic_device;
 #endif
+
+#define I2C_RETRY_CNT	3
+
 /*
 *VARIABLE DEFINITION
 */
@@ -1057,13 +1060,18 @@ static void s2mu106_pr_swap(void *_data, int val)
 
 static int s2mu106_usbpd_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
 {
-	int ret;
+	int ret, i;
 	struct device *dev = &i2c->dev;
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif
 
-	ret = i2c_smbus_read_byte_data(i2c, reg);
+	for (i = 0; i < I2C_RETRY_CNT; i++) {
+		ret = i2c_smbus_read_byte_data(i2c, reg);
+		if (ret >= 0)
+			break;
+		pr_info("%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
+	}
 	if (ret < 0) {
 		dev_err(dev, "%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
 #if defined(CONFIG_USB_HW_PARAM)
@@ -1079,7 +1087,7 @@ static int s2mu106_usbpd_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
 
 static int s2mu106_usbpd_bulk_read(struct i2c_client *i2c, u8 reg, int count, u8 *buf)
 {
-	int ret;
+	int ret, i;
 	struct device *dev = &i2c->dev;
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
@@ -1088,9 +1096,14 @@ static int s2mu106_usbpd_bulk_read(struct i2c_client *i2c, u8 reg, int count, u8
 	int retry = 0;
 #endif
 
-	ret = i2c_smbus_read_i2c_block_data(i2c, reg, count, buf);
+	for (i = 0; i < I2C_RETRY_CNT; i++) {
+		ret = i2c_smbus_read_i2c_block_data(i2c, reg, count, buf);
+		if (ret >= 0)
+			break;
+		pr_info("%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
+	}
 #ifdef CONFIG_SEC_FACTORY
-	for (retry = 0; retry < 5; retry++) {
+	for (retry = 0; retry < 2; retry++) {
 		if (ret < 0) {
 			dev_err(dev, "%s reg(0x%x), ret(%d) retry(%d) after now\n",
 							__func__, reg, ret, retry);
@@ -1119,13 +1132,18 @@ static int s2mu106_usbpd_bulk_read(struct i2c_client *i2c, u8 reg, int count, u8
 
 static int s2mu106_usbpd_write_reg(struct i2c_client *i2c, u8 reg, u8 value)
 {
-	int ret;
+	int ret, i;
 	struct device *dev = &i2c->dev;
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif
 
-	ret = i2c_smbus_write_byte_data(i2c, reg, value);
+	for (i = 0; i < I2C_RETRY_CNT; i++) {
+		ret = i2c_smbus_write_byte_data(i2c, reg, value);
+		if (ret >= 0)
+			break;
+		pr_info("%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
+	}
 	if (ret < 0) {
 		dev_err(dev, "%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
 #if defined(CONFIG_USB_HW_PARAM)
@@ -1138,13 +1156,18 @@ static int s2mu106_usbpd_write_reg(struct i2c_client *i2c, u8 reg, u8 value)
 
 static int s2mu106_usbpd_bulk_write(struct i2c_client *i2c, u8 reg, int count, u8 *buf)
 {
-	int ret;
+	int ret, i;
 	struct device *dev = &i2c->dev;
 #if defined(CONFIG_USB_HW_PARAM)
 	struct otg_notify *o_notify = get_otg_notify();
 #endif
 
-	ret = i2c_smbus_write_i2c_block_data(i2c, reg, count, buf);
+	for (i = 0; i < I2C_RETRY_CNT; i++) {
+		ret = i2c_smbus_write_i2c_block_data(i2c, reg, count, buf);
+		if (ret >= 0)
+			break;
+		pr_info("%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
+	}
 	if (ret < 0) {
 		dev_err(dev, "%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
 #if defined(CONFIG_USB_HW_PARAM)
@@ -1241,6 +1264,7 @@ static void s2mu106_set_irq_enable(struct s2mu106_usbpd_data *_data,
 	u8 int_mask[S2MU106_MAX_NUM_INT_STATUS]
 		= {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	int ret = 0;
+	int i;
 	struct i2c_client *i2c = _data->i2c;
 	struct device *dev = &i2c->dev;
 
@@ -1253,9 +1277,13 @@ static void s2mu106_set_irq_enable(struct s2mu106_usbpd_data *_data,
 	int_mask[4] &= ~int4;
 	int_mask[5] &= ~int5;
 
-	ret = i2c_smbus_write_i2c_block_data(i2c, S2MU106_REG_INT_MASK0,
-			S2MU106_MAX_NUM_INT_STATUS, int_mask);
-
+	for (i = 0; i < I2C_RETRY_CNT; i++) {
+		ret = i2c_smbus_write_i2c_block_data(i2c, S2MU106_REG_INT_MASK0,
+				S2MU106_MAX_NUM_INT_STATUS, int_mask);
+		if (ret >= 0)
+			break;
+		pr_info("%s:%s reg(0x%x), ret(%d)\n", MFD_DEV_NAME, __func__, S2MU106_REG_INT_MASK0, ret);
+	}
 	if (ret < 0)
 		dev_err(dev, "err write interrupt mask \n");
 }
@@ -1726,6 +1754,37 @@ static int s2mu106_set_otg_control(void *_data, int val)
 	mutex_unlock(&pdic_data->cc_mutex);
 
 	return 0;
+}
+
+static int s2mu106_set_chg_lv_mode(void *_data, int voltage)
+{
+	struct power_supply *psy_charger;
+	union power_supply_propval val;
+	int ret = 0;
+
+	psy_charger = get_power_supply_by_name("s2mu106-charger");
+	if (psy_charger == NULL) {
+		pr_err("%s: Fail to get psy charger\n", __func__);
+		return -1;
+	}
+
+	if (voltage == 5) {
+		val.intval = 0;
+	} else if (voltage == 9) {
+		val.intval = 1;
+	} else {
+		pr_err("%s: invalid pram:%d\n", __func__, voltage);
+		return -1;
+	}
+
+	ret = psy_charger->desc->set_property(psy_charger,
+		POWER_SUPPLY_PROP_2LV_3LV_CHG_MODE, &val);
+
+	if (ret)
+		pr_err("%s: fail to set power_suppy ONLINE property(%d)\n",
+			__func__, ret);
+
+	return ret;
 }
 
 static int s2mu106_set_cc_control(void *_data, int val)
@@ -4537,6 +4596,7 @@ static usbpd_phy_ops_type s2mu106_ops = {
 	.pd_vbus_short_check	= s2mu106_pd_vbus_short_check,
 	.set_cc_control		= s2mu106_set_cc_control,
 	.send_pd_info		= s2mu106_send_pd_info,
+	.set_chg_lv_mode	= s2mu106_set_chg_lv_mode,
 #if defined(CONFIG_CHECK_CTYPE_SIDE) || defined(CONFIG_CCIC_SYSFS)
 	.get_side_check		= s2mu106_get_side_check,
 #endif

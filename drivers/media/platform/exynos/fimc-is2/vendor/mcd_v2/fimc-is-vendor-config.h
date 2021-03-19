@@ -32,6 +32,9 @@
 #elif defined(CONFIG_CAMERA_AAS_V50S)
 #include "fimc-is-vendor-config_aas_v50s.h"
 #include "fimc-is-vendor-sensor-pwr_aas_v50s.h"
+#elif defined(CONFIG_CAMERA_FXT_V41)
+#include "fimc-is-vendor-config_fxt_v41.h"
+#include "fimc-is-vendor-sensor-pwr_fxt_v41.h"
 #elif defined(CONFIG_CAMERA_MMS_V30S)
 #include "fimc-is-vendor-config_mms_v30s.h"
 #include "fimc-is-vendor-sensor-pwr_mms_v30s.h"

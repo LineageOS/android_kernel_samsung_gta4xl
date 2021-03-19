@@ -319,27 +319,6 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 	incrop_cfg = *incrop;
 	otcrop_cfg = *otcrop;
 
-	if (IS_ENABLED(CHAIN_USE_STRIPE_PROCESSING) && frame && frame->stripe_info.region_num)
-		fimc_is_ischain_mxp_stripe_cfg(subdev, frame,
-				&incrop_cfg, &otcrop_cfg,
-				&queue->framecfg);
-
-	/* if output DS, skip check a incrop & input mcs param
-	 * because, DS input size set to preview port output size
-	 */
-	if ((index - PARAM_MCS_OUTPUT0) != MCSC_OUTPUT_DS)
-		fimc_is_ischain_mxp_compare_size(device, mcs_param, &incrop_cfg);
-
-	fimc_is_ischain_mxp_adjust_crop(device, incrop_cfg.w, incrop_cfg.h, &otcrop_cfg.w, &otcrop_cfg.h);
-
-	if (queue->framecfg.quantization == V4L2_QUANTIZATION_FULL_RANGE) {
-		crange = SCALER_OUTPUT_YUV_RANGE_FULL;
-		mdbg_pframe("CRange:W\n", device, subdev, frame);
-	} else {
-		crange = SCALER_OUTPUT_YUV_RANGE_NARROW;
-		mdbg_pframe("CRange:N\n", device, subdev, frame);
-	}
-
 	if (node->pixelformat && format->pixelformat != node->pixelformat) { /* per-frame control for RGB */
 		tmp_format = fimc_is_find_format((u32)node->pixelformat, 0);
 		if (tmp_format) {
@@ -364,13 +343,34 @@ static int fimc_is_ischain_mxp_start(struct fimc_is_device_ischain *device,
 		}
 	}
 
-	if (frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0] != mcs_output->flip) {
+	if ((index >= PARAM_MCS_OUTPUT0 && index < PARAM_MCS_OUTPUT5) &&
+		frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0] != mcs_output->flip) { /* per-frame control for flip */
 		flip = frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0];
 		queue->framecfg.flip = flip << 1;
 		mdbg_pframe("flip is changed(%d->%d)\n",
 			device, subdev, frame,
 			mcs_output->flip,
 			flip);
+	}
+	if (IS_ENABLED(CHAIN_USE_STRIPE_PROCESSING) && frame && frame->stripe_info.region_num)
+		fimc_is_ischain_mxp_stripe_cfg(subdev, frame,
+				&incrop_cfg, &otcrop_cfg,
+				&queue->framecfg);
+
+	/* if output DS, skip check a incrop & input mcs param
+	 * because, DS input size set to preview port output size
+	 */
+	if ((index - PARAM_MCS_OUTPUT0) != MCSC_OUTPUT_DS)
+		fimc_is_ischain_mxp_compare_size(device, mcs_param, &incrop_cfg);
+
+	fimc_is_ischain_mxp_adjust_crop(device, incrop_cfg.w, incrop_cfg.h, &otcrop_cfg.w, &otcrop_cfg.h);
+
+	if (queue->framecfg.quantization == V4L2_QUANTIZATION_FULL_RANGE) {
+		crange = SCALER_OUTPUT_YUV_RANGE_FULL;
+		mdbg_pframe("CRange:W\n", device, subdev, frame);
+	} else {
+		crange = SCALER_OUTPUT_YUV_RANGE_NARROW;
+		mdbg_pframe("CRange:N\n", device, subdev, frame);
 	}
 
 	mcs_output->otf_format = OTF_OUTPUT_FORMAT_YUV422;
@@ -610,7 +610,8 @@ static int fimc_is_ischain_mxp_tag(struct fimc_is_subdev *subdev,
 			pixelformat = node->pixelformat;
 		}
 
-		if (ldr_frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0] != mcs_output->flip)
+		if ((index >= PARAM_MCS_OUTPUT0 && index < PARAM_MCS_OUTPUT5) &&
+			ldr_frame->shot_ext->mcsc_flip[index - PARAM_MCS_OUTPUT0] != mcs_output->flip)
 			change_flip = true;
 
 		inparm.x = mcs_output->crop_offset_x;

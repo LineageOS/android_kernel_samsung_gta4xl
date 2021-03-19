@@ -146,26 +146,6 @@ struct crypto_diskcipher *crypto_diskcipher_get(struct bio *bio)
 			diskc = ERR_PTR(-EINVAL);
 		}
 	}
-
-#ifdef CONFIG_CRYPTO_DISKCIPHER_DEBUG
-	if (diskc) {
-		if (!IS_ERR(diskc)) {
-			if (diskc->inode)
-				crypto_diskcipher_debug(DISKC_API_GET, false);
-			else
-				crypto_diskcipher_debug(DISKC_API_GET_DISK, false);
-		} else {
-			crypto_diskcipher_debug(DISKC_API_GET, true);
-		}
-
-		if (!IS_ERR(diskc)) {
-			if ((diskc->ivmode != IV_MODE_DUN) && bio_dun(bio))
-				panic("invalid ivmode:%d, %d\n",
-					diskc->ivmode, bio_dun(bio));
-		}
-	}
-#endif
-
 	return diskc;
 }
 

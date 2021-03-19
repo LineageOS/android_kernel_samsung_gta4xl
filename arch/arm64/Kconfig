@@ -62,6 +62,7 @@ config ARM64
 	select GENERIC_STRNCPY_FROM_USER
 	select GENERIC_STRNLEN_USER
 	select GENERIC_TIME_VSYSCALL
+	select GENERIC_CPU_VULNERABILITIES
 	select HANDLE_DOMAIN_IRQ
 	select HARDIRQS_SW_RESEND
 	select HAVE_ACPI_APEI if (ACPI && EFI)
@@ -1229,6 +1230,13 @@ config RKP_KDP
 config RKP_NS_PROT
 	bool "Protection for namespace structure"
 	depends on RKP_KDP
+	default n
+	help
+	  Prevents unauthorized namespace modification.
+
+config RKP_NS_PROT_ROS
+	bool "Protection for namespace structure"
+	depends on RKP_NS_PROT
 	default n
 	help
 	  Prevents unauthorized namespace modification.

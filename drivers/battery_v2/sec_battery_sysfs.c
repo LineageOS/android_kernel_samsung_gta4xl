@@ -217,6 +217,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(normal_mode_bypass),
 	SEC_BATTERY_ATTR(factory_voltage_regulation),
 	SEC_BATTERY_ATTR(volt_slope),
+	SEC_BATTERY_ATTR(factory_mode_disable),
 };
 
 void update_external_temp_table(struct sec_battery_info *battery, int temp[])
@@ -230,6 +231,34 @@ void update_external_temp_table(struct sec_battery_info *battery, int temp[])
 	battery->pdata->temp_low_threshold_lpm = temp[6];
 	battery->pdata->temp_low_recovery_lpm = temp[7];
 
+}
+
+static int sec_bat_get_temperature(struct sec_battery_info *battery,
+			enum sec_battery_adc_channel channel, int thermal_source, int temp_check_type)
+{
+	union power_supply_propval value = {0, };
+
+	/* get battery thm info */
+	switch (thermal_source) {
+	case SEC_BATTERY_THERMAL_SOURCE_FG:
+		psy_do_property(battery->pdata->fuelgauge_name, get,
+			POWER_SUPPLY_PROP_TEMP, value);
+		break;
+	case SEC_BATTERY_THERMAL_SOURCE_CALLBACK:
+		if (battery->pdata->get_temperature_callback)
+			battery->pdata->get_temperature_callback(
+				POWER_SUPPLY_PROP_TEMP, &value);
+		break;
+	case SEC_BATTERY_THERMAL_SOURCE_ADC:
+		if (!sec_bat_get_value_by_adc(battery, channel,
+			&value, temp_check_type))
+			value.intval = 0;
+		break;
+	default:
+		break;
+	}
+
+	return value.intval;
 }
 
 ssize_t sec_bat_show_attrs(struct device *dev,
@@ -371,14 +400,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case BATT_TEMP_ADC_AVER:
 		break;
 	case USB_TEMP:
-		if (sec_bat_get_value_by_adc(battery,
-				SEC_BAT_ADC_CHANNEL_USB_TEMP, &value, battery->pdata->usb_temp_check_type)) {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				       value.intval);
-		} else {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				       0);
-		}
+		value.intval = sec_bat_get_temperature(battery, SEC_BAT_ADC_CHANNEL_USB_TEMP,
+			battery->pdata->usb_thermal_source, battery->pdata->usb_temp_check_type);
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case USB_TEMP_ADC:
 		if (battery->pdata->usb_thermal_source) {
@@ -390,14 +414,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		}
 		break;
 	case CHG_TEMP:
-		if (sec_bat_get_value_by_adc(battery,
-			SEC_BAT_ADC_CHANNEL_CHG_TEMP, &value, battery->pdata->chg_temp_check_type)) {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				       value.intval);
-		} else {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				       0);
-		}
+		value.intval = sec_bat_get_temperature(battery, SEC_BAT_ADC_CHANNEL_CHG_TEMP,
+			battery->pdata->chg_thermal_source, battery->pdata->chg_temp_check_type);
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case CHG_TEMP_ADC:
 		if (battery->pdata->chg_thermal_source) {
@@ -409,14 +428,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		}
 		break;
 	case SLAVE_CHG_TEMP:
-		if (sec_bat_get_value_by_adc(battery,
-			SEC_BAT_ADC_CHANNEL_SLAVE_CHG_TEMP, &value , battery->pdata->slave_chg_temp_check_type)) {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-					   value.intval);
-		} else {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-					   0);
-		}
+		value.intval = sec_bat_get_temperature(battery, SEC_BAT_ADC_CHANNEL_SLAVE_CHG_TEMP,
+			battery->pdata->slave_thermal_source, battery->pdata->slave_chg_temp_check_type);
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case SLAVE_CHG_TEMP_ADC:
 		if (battery->pdata->slave_thermal_source) {
@@ -677,9 +691,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case BATT_INBAT_VOLTAGE_OCV:
 		if(battery->pdata->support_fgsrc_change == true) {
 			int j, k, ocv, ocv_data[10];
-			value.intval = SEC_BAT_INBAT_FGSRC_SWITCHING_ON;
+			value.intval = SEC_BAT_INBAT_FGSRC_SWITCHING_VBAT;
 			psy_do_property(battery->pdata->fgsrc_switch_name, set,
-					POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING, value);
+					POWER_SUPPLY_EXT_PROP_FGSRC_SWITCHING, value);
 			for (j = 0; j < 10; j++) {
 				msleep(175);
 				psy_do_property(battery->pdata->fuelgauge_name, get,
@@ -688,9 +702,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			}
 
 			if (battery->is_jig_on || battery->factory_mode || factory_mode) {
-				value.intval = SEC_BAT_INBAT_FGSRC_SWITCHING_OFF;
+				value.intval = SEC_BAT_INBAT_FGSRC_SWITCHING_VSYS;
 				psy_do_property(battery->pdata->fgsrc_switch_name, set,
-						POWER_SUPPLY_EXT_PROP_INBAT_VOLTAGE_FGSRC_SWITCHING, value);
+						POWER_SUPPLY_EXT_PROP_FGSRC_SWITCHING, value);
 			}
 
 			for (j = 1; j < 10; j++) {
@@ -803,14 +817,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		break;
 #endif
 	case BATT_WPC_TEMP:
-		if (sec_bat_get_value_by_adc(battery,
-			SEC_BAT_ADC_CHANNEL_WPC_TEMP, &value, battery->pdata->wpc_temp_check_type)) {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				value.intval);
-		} else {
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				0);
-		}
+		value.intval = sec_bat_get_temperature(battery, SEC_BAT_ADC_CHANNEL_WPC_TEMP,
+			battery->pdata->wpc_thermal_source, battery->pdata->wpc_temp_check_type);
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case BATT_WPC_TEMP_ADC:
 		if (battery->pdata->wpc_thermal_source) {
@@ -1460,11 +1469,13 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 
 			volt_cal.intval = 1;
 			psy_do_property(battery->pdata->fuelgauge_name, get,
-				POWER_SUPPLY_EXT_PROP_MEASURE_SYS, volt_cal);
+				POWER_SUPPLY_EXT_PROP_VOLT_SLOPE, volt_cal);
 
 			i += scnprintf(buf + i, PAGE_SIZE - i, "0x%04x\n",
 					volt_cal.intval);
 		}
+		break;
+	case FACTORY_MODE_DISABLE:
 		break;
 	default:
 		i = -EINVAL;
@@ -2985,6 +2996,14 @@ ssize_t sec_bat_store_attrs(
 		ret = count;
 		break;
 	case VOLT_SLOPE:
+		break;
+	case FACTORY_MODE_DISABLE:
+		if (sscanf(buf, "%10d\n", &x) == 1) {
+			value.intval = x;
+			psy_do_property(battery->pdata->charger_name, set,
+				POWER_SUPPLY_EXT_PROP_DISABLE_FACTORY_MODE, value);
+			ret = count;
+		}
 		break;
 	default:
 		ret = -EINVAL;

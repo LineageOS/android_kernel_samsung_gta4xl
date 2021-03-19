@@ -356,6 +356,7 @@ void usbpd_set_ops(struct device *dev, usbpd_phy_ops_type *ops)
 	pd_data->phy_ops.vbus_on_check = ops->vbus_on_check;
 	pd_data->phy_ops.set_rp_control = ops->set_rp_control;
 	pd_data->phy_ops.send_pd_info = ops->send_pd_info;
+	pd_data->phy_ops.set_chg_lv_mode = ops->set_chg_lv_mode;
 #if defined(CONFIG_TYPEC)
 	pd_data->phy_ops.set_pwr_opmode = ops->set_pwr_opmode;
 #endif

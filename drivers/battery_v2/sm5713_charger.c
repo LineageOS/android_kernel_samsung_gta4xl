@@ -467,11 +467,7 @@ static int psy_chg_get_charge_type(struct sm5713_charger_data *charger)
 			dev_info(charger->dev, "%s: slow rate charge mode\n", __func__);
 			charge_type = POWER_SUPPLY_CHARGE_TYPE_SLOW;
 		} else {
-			if (reg & (0x1 << 4)) { /* CHECK Q4FULLON Status */
-				charge_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
-			} else {
-				charge_type = POWER_SUPPLY_CHARGE_TYPE_TRICKLE; 	/* Linear-Charge mode */
-			}
+			charge_type = POWER_SUPPLY_CHARGE_TYPE_FAST;
 		}
 	} else {
 		charge_type = POWER_SUPPLY_CHARGE_TYPE_NONE;
@@ -535,6 +531,9 @@ static int sm5713_chg_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGING_ENABLED:
 		val->intval = charger->charge_mode;
+		break;
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->intval = IC_TYPE_IFPMIC_SM5713;
 		break;
 	case POWER_SUPPLY_PROP_MAX ... POWER_SUPPLY_EXT_PROP_MAX:
 		switch (ext_psp) {

@@ -82,6 +82,12 @@ config CAMERA_AAS_V51
         default n
         help
           This camera is aas_v51 project.
+config CAMERA_FXT_V41
+        bool "This camera is fxt_v41 project"
+        depends on VENDER_MCD_V2
+        default n
+        help
+          This camera is fxt_v41 project
 config SECURE_CAMERA_USE
         bool "Use secure camera"
         depends on VENDER_MCD_V2

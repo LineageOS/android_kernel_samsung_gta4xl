@@ -4,12 +4,17 @@
  *
  ****************************************************************************/
 #include <linux/mutex.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#include <scsc/scsc_wakelock.h>
+#else
 #include <linux/wakelock.h>
+#endif
 #include <linux/string.h>
 
 #include "scsc_wlbtd.h"
 
-#define MAX_TIMEOUT		18000 /* in milisecounds */
+#define MAX_TIMEOUT		30000 /* in milisecounds */
 #define WRITE_FILE_TIMEOUT	1000 /* in milisecounds */
 #define MAX_RSP_STRING_SIZE	128
 #define PROP_VALUE_MAX		92
@@ -25,10 +30,11 @@ static DEFINE_MUTEX(build_type_lock);
 static char *build_type;
 static DEFINE_MUTEX(sable_lock);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+static struct scsc_wake_lock wlbtd_wakelock;
+#else
 static struct wake_lock wlbtd_wakelock;
-
-/* module parameter controlling recovery handling */
-extern int disable_recovery_handling;
+#endif
 
 const char *response_code_to_str(enum scsc_wlbtd_response_codes response_code)
 {
@@ -110,7 +116,7 @@ static int msg_from_wlbtd_sable_cb(struct sk_buff *skb, struct genl_info *info)
 		goto error_complete;
 	}
 
-	SCSC_TAG_INFO(WLBTD, "%s\n", (char *)nla_data(info->attrs[1]));
+	SCSC_TAG_INFO(WLBTD, "%s\n", nla_data(info->attrs[1]));
 	status = nla_get_u16(info->attrs[2]);
 
 	if ((enum scsc_wlbtd_response_codes)status < SCSC_WLBTD_LAST_RESPONSE_CODE)
@@ -249,7 +255,7 @@ static int msg_from_wlbtd_build_type_cb(struct sk_buff *skb, struct genl_info *i
 	}
 
 	/* nla_len includes trailing zero. Tested.*/
-	build_type = kmalloc(nla_len(info->attrs[1]), GFP_KERNEL);
+	build_type = kmalloc(PROP_VALUE_MAX + 1, GFP_KERNEL);
 	if (!build_type) {
 		SCSC_TAG_ERR(WLBTD, "kmalloc failed: build_type = NULL\n");
 		mutex_unlock(&build_type_lock);
@@ -269,7 +275,6 @@ static int msg_from_wlbtd_build_type_cb(struct sk_buff *skb, struct genl_info *i
 	SCSC_TAG_INFO(WLBTD, "ro.build.type = %s\n", build_type);
 	mutex_unlock(&build_type_lock);
 	return 0;
-
 }
 
 static int msg_from_wlbtd_write_file_cb(struct sk_buff *skb, struct genl_info *info)
@@ -289,6 +294,7 @@ error_complete:
 	return ret_code;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 /**
  * Here you can define some constraints for the attributes so Linux will
  * validate them for you.
@@ -311,6 +317,7 @@ static struct nla_policy policy_write_file[] = {
 	[ATTR_PATH] = { .type = NLA_STRING, },
 	[ATTR_CONTENT] = { .type = NLA_STRING, },
 };
+#endif
 
 
 /**
@@ -320,28 +327,36 @@ const struct genl_ops scsc_ops[] = {
 	{
 		.cmd = EVENT_SCSC,
 		.flags = 0,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		.policy = policies,
+#endif
 		.doit = msg_from_wlbtd_cb,
 		.dumpit = NULL,
 	},
 	{
 		.cmd = EVENT_SYSTEM_PROPERTY,
 		.flags = 0,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		.policy = policies_build_type,
+#endif
 		.doit = msg_from_wlbtd_build_type_cb,
 		.dumpit = NULL,
 	},
 	{
 		.cmd = EVENT_SABLE,
 		.flags = 0,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		.policy = policy_sable,
+#endif
 		.doit = msg_from_wlbtd_sable_cb,
 		.dumpit = NULL,
 	},
 	{
 		.cmd = EVENT_WRITE_FILE,
 		.flags = 0,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
 		.policy = policy_write_file,
+#endif
 		.doit = msg_from_wlbtd_write_file_cb,
 		.dumpit = NULL,
 	},
@@ -437,7 +452,6 @@ error:
 
 int wlbtd_write_file(const char *file_path, const char *file_content)
 {
-#ifdef CONFIG_SCSC_WRITE_INFO_FILE_WLBTD
 	struct sk_buff *skb;
 	void *msg;
 	int rc = 0;
@@ -532,9 +546,6 @@ error:
 	wake_unlock(&wlbtd_wakelock);
 	mutex_unlock(&write_file_lock);
 	return -1;
-#else /* CONFIG_SCSC_WRITE_INFO_FILE_WLBTD */
-	return 0; /* stub */
-#endif
 }
 EXPORT_SYMBOL(wlbtd_write_file);
 
@@ -763,7 +774,11 @@ int scsc_wlbtd_init(void)
 {
 	int r = 0;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	wake_lock_init(NULL, &(wlbtd_wakelock.ws), "wlbtd_wl");
+#else
 	wake_lock_init(&wlbtd_wakelock, WAKE_LOCK_SUSPEND, "wlbtd_wl");
+#endif
 	init_completion(&event_done);
 	init_completion(&fw_sable_done);
 	init_completion(&fw_panic_done);

@@ -215,6 +215,7 @@ typedef enum {
 
 	ATTACHED_DEV_AFC_CHARGER_ERR_V_MUIC,
 	ATTACHED_DEV_AFC_CHARGER_ERR_V_DUPLI_MUIC,
+	ATTACHED_DEV_AFC_CHARGER_DISABLED_MUIC,
 	ATTACHED_DEV_QC_CHARGER_PREPARE_MUIC,
 	ATTACHED_DEV_QC_CHARGER_5V_MUIC,
 	ATTACHED_DEV_QC_CHARGER_ERR_V_MUIC,
@@ -222,8 +223,8 @@ typedef enum {
 	ATTACHED_DEV_HV_ID_ERR_UNDEFINED_MUIC,
 	ATTACHED_DEV_HV_ID_ERR_UNSUPPORTED_MUIC,
 	ATTACHED_DEV_HV_ID_ERR_SUPPORTED_MUIC,
-	ATTACHED_DEV_HMT_MUIC,
 
+	ATTACHED_DEV_HMT_MUIC,
 	ATTACHED_DEV_VZW_ACC_MUIC,
 	ATTACHED_DEV_VZW_INCOMPATIBLE_MUIC,
 	ATTACHED_DEV_USB_LANHUB_MUIC,
@@ -233,8 +234,8 @@ typedef enum {
 	ATTACHED_DEV_UNSUPPORTED_ID_VB_MUIC,
 	ATTACHED_DEV_UNDEFINED_RANGE_MUIC,
 	ATTACHED_DEV_RDU_TA_MUIC,
-	ATTACHED_DEV_GAMEPAD_MUIC,
 
+	ATTACHED_DEV_GAMEPAD_MUIC,
 	ATTACHED_DEV_TIMEOUT_OPEN_MUIC,
 	ATTACHED_DEV_HICCUP_MUIC,
 	ATTACHED_DEV_POGO_DOCK_MUIC,
@@ -244,8 +245,8 @@ typedef enum {
 	ATTACHED_DEV_TYPE3_MUIC_TA,
 	ATTACHED_DEV_TYPE3_ADAPTER_MUIC,
 	ATTACHED_DEV_TYPE3_CHARGER_MUIC,
-	ATTACHED_DEV_NONE_TYPE3_MUIC,
 
+	ATTACHED_DEV_NONE_TYPE3_MUIC,
 	ATTACHED_DEV_WIRELESS_PAD_MUIC,
 #if defined(CONFIG_SEC_FACTORY)
 	ATTACHED_DEV_CARKIT_MUIC,
@@ -257,8 +258,8 @@ typedef enum {
 	ATTACHED_DEV_EARJACK_MUIC,
 	ATTACHED_DEV_SEND_MUIC,
 	ATTACHED_DEV_VOLDN_MUIC,
-	ATTACHED_DEV_VOLUP_MUIC,
 
+	ATTACHED_DEV_VOLUP_MUIC,
 	ATTACHED_DEV_CHECK_OCP,
 	ATTACHED_DEV_FACTORY_UART_MUIC,
 	ATTACHED_DEV_ABNORMAL_OTG_MUIC,
@@ -341,11 +342,7 @@ struct muic_platform_data {
 	void (*jig_uart_cb)(int jig_state);
 
 	/* muic GPIO control function */
-#if defined(CONFIG_MUIC_S2MU106)
 	int (*init_gpio_cb)(void *, int switch_sel);
-#else
-	int (*init_gpio_cb)(int switch_sel);
-#endif
 	int (*set_gpio_usb_sel)(int usb_path);
 	int (*set_gpio_uart_sel)(int uart_path);
 	int (*set_safeout)(int safeout_path);
@@ -547,16 +544,30 @@ int get_switch_sel(void);
 int get_afc_mode(void);
 extern void muic_disable_otg_detect(void);
 
-int get_ccic_info(void);
+extern int get_ccic_info(void);
 void muic_set_hmt_status(int status);
 extern void muic_send_dock_intent(int type);
-extern int muic_hv_charger_disable(bool en);
 int muic_afc_set_voltage(int voltage);
-int muic_afc_get_voltage(void);
 int muic_hv_charger_init(void);
 int muic_set_hiccup_mode(int on_off);
 
 #ifdef CONFIG_SEC_FACTORY
 extern void muic_send_attached_muic_cable_intent(int type);
 #endif /* CONFIG_SEC_FACTORY */
+
+#ifdef CONFIG_SWITCH
+extern struct switch_dev switch_dock;
+extern struct switch_dev switch_uart3;
+#ifdef CONFIG_SEC_FACTORY
+extern struct switch_dev switch_attached_muic_cable;
+#endif
+#endif /* CONFIG_SWITCH */
+extern struct muic_platform_data muic_pdata;
+extern int muic_dock_attach_notify(int type, const char *name);
+extern int muic_dock_detach_notify(void);
+extern int muic_handle_cable_data_notification(struct notifier_block *nb,
+				unsigned long action, void *data);
+extern void muic_init_switch_dev_cb(void);
+extern void muic_cleanup_switch_dev_cb(void);
+extern int muic_init_gpio_cb(void *data, int switch_sel);
 #endif /* __MUIC_H__ */

@@ -75,9 +75,6 @@ int exynos_fmp_crypt_cfg(struct bio *bio, void *table_addr,
 		req.cmdq_enabled = 0;
 		req.iv = &iv;
 		req.ivsize = sizeof(iv);
-		iv = (dtfm->ivmode == IV_MODE_DUN) ? (bio_dun(bio) + page_idx) :
-			(bio->bi_iter.bi_sector + (sector_t)sector_unit);
-
 #ifdef CONFIG_EXYNOS_FMP_FIPS
 		/* check fips flag. use fmp without diskcipher */
 		if (!dtfm->algo) {
@@ -86,6 +83,8 @@ int exynos_fmp_crypt_cfg(struct bio *bio, void *table_addr,
 			return 0;
 		}
 #endif
+		iv = (dtfm->ivmode == IV_MODE_DUN) ? (bio_dun(bio) + page_idx) :
+			(bio->bi_iter.bi_sector + (sector_t)sector_unit);
 		ret = crypto_diskcipher_set_crypt(dtfm, &req);
 		if (ret)
 			pr_err("%s: fail to config desc (bio, tfm) ret:%d\n", __func__, ret);

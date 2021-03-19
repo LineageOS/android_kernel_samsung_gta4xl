@@ -33,7 +33,8 @@
 #define SENSOR_TYPE_GEOMAGNETIC_POWER               (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 3)
 #define SENSOR_TYPE_INTERRUPT_GYRO                  (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 4)
 #define SENSOR_TYPE_SCONTEXT                        (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 5)
-#define SENSOR_TYPE_MOBEAM                          (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 6)
+//#define SENSOR_TYPE_MOBEAM                          (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 6)
+#define SENSOR_TYPE_SENSORHUB                      (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 6)
 #define SENSOR_TYPE_LIGHT_CCT                       (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 7)
 #define SENSOR_TYPE_CALL_GESTURE                    (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 8)
 #define SENSOR_TYPE_WAKE_UP_MOTION                  (SENSOR_TYPE_DEVICE_PRIVATE_BASE + 9)
@@ -50,7 +51,7 @@
 ******************************/
 
 /* sensor types defined by samsung */
-#define SS_SENSOR_TYPE_BASE                       (LEGACY_SENSOR_MAX)
+#define SS_SENSOR_TYPE_BASE                       (128)
 #define SS_SENSOR_TYPE_CALL_POSE                  (SS_SENSOR_TYPE_BASE + 2)
 #define SS_SENSOR_TYPE_PEDOMETER                  (SS_SENSOR_TYPE_BASE + 3)
 #define SS_SENSOR_TYPE_MOTION                     (SS_SENSOR_TYPE_BASE + 4)

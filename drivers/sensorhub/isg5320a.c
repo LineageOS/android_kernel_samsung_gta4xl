@@ -51,8 +51,13 @@
 #define ISG5320A_DISPLAY_TIME    30
 #define ISG5320A_TAG             "[ISG5320A]"
 
+#if IS_ENABLED(CONFIG_HALL_NEW_NODE)
+#define HALLIC_PATH	           "/sys/class/sec/hall_ic/hall_detect"
+#define HALLIC_CERT_PATH       "/sys/class/sec/hall_ic/certify_hall_detect"
+#else
 #define HALLIC_PATH            "/sys/class/sec/sec_key/hall_detect"
 #define HALLIC_CERT_PATH       "/sys/class/sec/sec_key/certify_hall_detect"
+#endif
 
 #define ISG5320A_INIT_DELAYEDWORK
 #define GRIP_LOG_TIME            40 /* 20 sec */
@@ -71,6 +76,7 @@ struct isg5320a_data {
 	struct device *dev;
 	struct delayed_work debug_work;
 	struct delayed_work cal_work;
+	struct work_struct force_cal_work;
 #ifdef ISG5320A_INIT_DELAYEDWORK
 	struct delayed_work init_work;
 #endif
@@ -1478,6 +1484,13 @@ static void cal_work_func(struct work_struct *work)
 		schedule_delayed_work(&data->cal_work, msecs_to_jiffies(500));
 }
 
+static void force_cal_work_func(struct work_struct *work)
+{
+	struct isg5320a_data *data = container_of(work,
+						  struct isg5320a_data, force_cal_work);
+	isg5320a_force_calibration(data, true);
+}
+
 static void debug_work_func(struct work_struct *work)
 {
 	int ret;
@@ -1557,7 +1570,7 @@ static int isg5320a_ccic_handle_notification(struct notifier_block *nb,
 		case USB_STATUS_NOTIFY_DETACH:
 			pr_info("%s - drp = %d attat = %d\n", ISG5320A_TAG, usb_status.drp,
 				usb_status.attach);
-			isg5320a_force_calibration(pdata, true);
+			schedule_work(&pdata->force_cal_work);
 			break;
 		default:
 			pr_info("%s - DRP type : %d\n", ISG5320A_TAG, usb_status.drp);
@@ -1591,7 +1604,7 @@ static int isg5320a_cpuidle_muic_notifier(struct notifier_block *nb,
 			pr_info("%s TA/USB is removed\n", ISG5320A_TAG);
 
 		if (data->initialized == ON)
-			isg5320a_force_calibration(data, true);
+			schedule_work(&pdata->force_cal_work);
 		else
 			pr_info("%s not initialized\n", ISG5320A_TAG);
 
@@ -1770,6 +1783,7 @@ static int isg5320a_probe(struct i2c_client *client,
 	wake_lock_init(&data->grip_wake_lock, WAKE_LOCK_SUSPEND, "grip_wake_lock");
 	INIT_DELAYED_WORK(&data->debug_work, debug_work_func);
 	INIT_DELAYED_WORK(&data->cal_work, cal_work_func);
+	INIT_WORK(&data->force_cal_work, force_cal_work_func);
 #ifdef ISG5320A_INIT_DELAYEDWORK
 	INIT_DELAYED_WORK(&data->init_work, init_work_func);
 	schedule_delayed_work(&data->init_work, msecs_to_jiffies(300));
@@ -1871,6 +1885,7 @@ static void isg5320a_shutdown(struct i2c_client *client)
 
 	pr_info("%s %s\n", ISG5320A_TAG, __func__);
 
+	cancel_work_sync(&data->force_cal_work);
 	isg5320a_set_debug_work(data, OFF, 0);
 	if (data->enable == ON)
 		isg5320a_set_enable(data, OFF);

@@ -235,4 +235,5 @@ source "drivers/vibrator/Kconfig"
 source "drivers/fingerprint/Kconfig"
 
 source "drivers/spu_verify/Kconfig"
+
 endmenu

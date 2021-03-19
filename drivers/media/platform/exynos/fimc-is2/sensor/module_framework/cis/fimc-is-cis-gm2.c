@@ -826,6 +826,21 @@ int sensor_gm2_cis_stream_on(struct v4l2_subdev *subdev)
 		goto p_i2c_err;
 	}
 
+	/* Disabling embedded data*/
+	if(sensor_peri->companion){
+		ret = fimc_is_sensor_write16(client, 0x6028, 0x4000);
+		if (ret < 0) {
+			err("[%s] sensor_gm2 disable embed register 1 failed", __func__);
+			goto p_i2c_err;
+		}
+
+		ret = fimc_is_sensor_write16(client, 0x0118, 0x0000);
+		if (ret < 0) {
+			err("[%s] sensor_gm2 disable embed register 2 failed", __func__);
+			goto p_i2c_err;
+		}
+	}
+
 	/* Sensor stream on */
 	fimc_is_sensor_write16(client, 0x0100, 0x0100);
 

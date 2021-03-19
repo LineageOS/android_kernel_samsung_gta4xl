@@ -73,9 +73,17 @@
 #if defined(CONFIG_FOLDER_HALL)
 #define HALLIC_PATH		"/sys/class/sec/sec_flip/flipStatus"
 #else
+#if IS_ENABLED(CONFIG_HALL_NEW_NODE)
+#define HALLIC_PATH	"/sys/class/sec/hall_ic/hall_detect"
+#else
 #define HALLIC_PATH		"/sys/class/sec/sec_key/hall_detect"
 #endif
+#endif
+#if IS_ENABLED(CONFIG_HALL_NEW_NODE)
+#define HALLIC_CERT_PATH	"/sys/class/sec/hall_ic/certify_hall_detect"
+#else
 #define HALLIC_CERT_PATH	"/sys/class/sec/sec_key/certify_hall_detect"
+#endif
 
 struct sx9360_p {
 	struct i2c_client *client;

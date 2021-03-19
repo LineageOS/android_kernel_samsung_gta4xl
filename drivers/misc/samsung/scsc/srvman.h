@@ -8,7 +8,11 @@
 #define _SRVMAN_H
 
 #ifdef CONFIG_ANDROID
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+#include <scsc/scsc_wakelock.h>
+#else
 #include <linux/wakelock.h>
+#endif
 #endif
 
 #include "scsc/scsc_mx.h"
@@ -20,8 +24,9 @@ int  srvman_suspend_services(struct srvman *srvman);
 int  srvman_resume_services(struct srvman *srvman);
 void srvman_freeze_services(struct srvman *srvman, struct mx_syserr_decode *syserr);
 void srvman_freeze_sub_system(struct srvman *srvman, struct mx_syserr_decode *syserr);
-void srvman_unfreeze_services(struct srvman *srvman, u16 scsc_panic_code);
+void srvman_unfreeze_services(struct srvman *srvman, struct mx_syserr_decode *syserr);
 void srvman_unfreeze_sub_system(struct srvman *srvman, struct mx_syserr_decode *syserr);
+u8 srvman_notify_services(struct srvman *srvman, struct mx_syserr_decode *syserr);
 u8 srvman_notify_sub_system(struct srvman *srvman, struct mx_syserr_decode *syserr);
 void srvman_set_error(struct srvman *srvman);
 void srvman_clear_error(struct srvman *srvman);
@@ -32,9 +37,14 @@ struct srvman {
 	struct list_head service_list;
 	struct mutex     service_list_mutex;
 	struct mutex     api_access_mutex;
+	struct mutex     error_state_mutex;
 	bool             error;
 #ifdef CONFIG_ANDROID
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	struct scsc_wake_lock sm_wake_lock;
+#else
 	struct wake_lock sm_wake_lock;
+#endif
 #endif
 };
 

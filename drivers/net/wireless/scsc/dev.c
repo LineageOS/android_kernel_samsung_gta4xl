@@ -62,7 +62,7 @@ MODULE_PARM_DESC(lls_disabled, "Disable LLS: to disable LLS set 1");
 #ifdef SCSC_SEP_VERSION
 static bool gscan_disabled = 1;
 #else
-static bool gscan_disabled = 0;
+static bool gscan_disabled;
 #endif
 module_param(gscan_disabled, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(gscan_disabled, "Disable gscan: to disable gscan set 1");
@@ -82,7 +82,12 @@ MODULE_PARM_DESC(vo_vi_block_ack_disabled, "Disable VO VI Block Ack logic added 
 static int max_scan_result_count = 200;
 module_param(max_scan_result_count, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(max_scan_result_count, "Max scan results to be reported");
+
+#ifdef CONFIG_SCSC_WLAN_RTT
+static bool rtt_disabled;
+#else
 static bool rtt_disabled = 1;
+#endif
 module_param(rtt_disabled, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(rtt_disabled, "Disable rtt: to disable rtt set 1");
 
@@ -102,6 +107,20 @@ MODULE_PARM_DESC(nan_max_ndp_instances, "max ndp sessions");
 static int nan_max_ndi_ifaces = 1;
 module_param(nan_max_ndi_ifaces, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(nan_max_ndi_ifaces, "max ndi interface");
+
+#ifdef SCSC_SEP_VERSION
+static int nan_ndp_delay_ms = 550;
+static int nan_ndp_max_delay_ms = 600;
+#else
+static int nan_ndp_delay_ms = 750;
+static int nan_ndp_max_delay_ms = 800;
+#endif
+
+module_param(nan_ndp_delay_ms, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(nan_ndp_delay_ms, "ndp delay time");
+module_param(nan_ndp_max_delay_ms, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(nan_ndp_max_delay_ms, "max ndp delay time");
+
 #endif
 
 bool slsi_dev_gscan_supported(void)
@@ -165,6 +184,19 @@ int slsi_get_nan_max_ndi_ifaces(void)
 {
 	return nan_max_ndi_ifaces;
 }
+
+int slsi_get_nan_ndp_delay(void)
+{
+	return nan_ndp_delay_ms;
+}
+
+int slsi_get_nan_ndp_max_time(void)
+{
+	if (nan_ndp_delay_ms >= nan_ndp_max_delay_ms)
+		nan_ndp_max_delay_ms = nan_ndp_delay_ms + 50;
+
+	return nan_ndp_max_delay_ms;
+}
 #endif
 
 static int slsi_dev_inetaddr_changed(struct notifier_block *nb, unsigned long data, void *arg)
@@ -188,10 +220,10 @@ static int slsi_dev_inetaddr_changed(struct notifier_block *nb, unsigned long da
 
 	SLSI_NET_INFO(dev, "IP: %pI4\n", &ifa->ifa_address);
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
-#if !defined SLSI_TEST_DEV && defined CONFIG_ANDROID
-	if (SLSI_IS_VIF_INDEX_WLAN(ndev_vif) && wake_lock_active(&sdev->wlan_wl_roam)) {
+#ifndef SLSI_TEST_DEV
+	if (SLSI_IS_VIF_INDEX_WLAN(ndev_vif) && slsi_wake_lock_active(&sdev->wlan_wl_roam)) {
 		SLSI_NET_DBG2(dev, SLSI_NETDEV, "Releasing the roaming wakelock\n");
-		wake_unlock(&sdev->wlan_wl_roam);
+		slsi_wake_unlock(&sdev->wlan_wl_roam);
 		/* If upper layers included wps ie in connect but the actually
 		 * connection is not for wps, reset the wps flag.
 		 */
@@ -248,13 +280,14 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 	}
 
 	sdev->mlme_blocked = false;
+	sdev->wlan_service_on = 0;
 
 	SLSI_MUTEX_INIT(sdev->netdev_add_remove_mutex);
 	mutex_init(&sdev->netdev_remove_mutex);
 	SLSI_MUTEX_INIT(sdev->start_stop_mutex);
 	SLSI_MUTEX_INIT(sdev->device_config_mutex);
 	SLSI_MUTEX_INIT(sdev->logger_mutex);
-
+	slsi_spinlock_create(&sdev->netdev_lock);
 	sdev->dev = dev;
 	sdev->maxwell_core = core;
 	memcpy(&sdev->mx_wlan_client, mx_wlan_client, sizeof(struct scsc_service_client));
@@ -282,13 +315,19 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 #endif
 
 	slsi_log_clients_init(sdev);
-
-	slsi_wakelock_init(&sdev->wlan_wl, "wlan");
-	slsi_wakelock_init(&sdev->wlan_wl_mlme, "wlan_mlme");
-	slsi_wakelock_init(&sdev->wlan_wl_ma, "wlan_ma");
-#if !defined SLSI_TEST_DEV && defined CONFIG_ANDROID
-	wake_lock_init(&sdev->wlan_wl_roam, WAKE_LOCK_SUSPEND, "wlan_roam");
+	slsi_traffic_mon_clients_init(sdev);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
+	slsi_wake_lock_init(NULL,&sdev->wlan_wl.ws, "wlan");
+	slsi_wake_lock_init(NULL,&sdev->wlan_wl_mlme.ws, "wlan_mlme");
+	slsi_wake_lock_init(NULL,&sdev->wlan_wl_ma.ws, "wlan_ma");
+	slsi_wake_lock_init(NULL,&sdev->wlan_wl_roam.ws, "wlan_roam");
+#else
+	slsi_wake_lock_init(&sdev->wlan_wl, WAKE_LOCK_SUSPEND, "wlan");
+	slsi_wake_lock_init(&sdev->wlan_wl_mlme, WAKE_LOCK_SUSPEND, "wlan_mlme");
+	slsi_wake_lock_init(&sdev->wlan_wl_ma, WAKE_LOCK_SUSPEND, "wlan_ma");
+	slsi_wake_lock_init(&sdev->wlan_wl_roam, WAKE_LOCK_SUSPEND, "wlan_roam");
 #endif
+
 	sdev->recovery_next_state = 0;
 	init_completion(&sdev->recovery_remove_completion);
 	init_completion(&sdev->recovery_stop_completion);
@@ -309,11 +348,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 		SLSI_ERR(sdev, "Can not create the network interface\n");
 		goto err_ctrl_wq_init;
 	}
-
-	if (slsi_hip_init(sdev, dev) != 0) {
-		SLSI_ERR(sdev, "slsi_hip_init() Failed\n");
-		goto err_netif_init;
-	}
+	slsi_hip_init(sdev, dev);
 
 	if (slsi_udi_node_init(sdev, dev) != 0) {
 		SLSI_ERR(sdev, "failed to init UDI\n");
@@ -321,7 +356,6 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 	}
 
 	slsi_create_proc_dir(sdev);
-	slsi_traffic_mon_clients_init(sdev);
 
 	/* update regulatory domain */
 	slsi_regd_init(sdev);
@@ -369,7 +403,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 		goto err_wlan_registered;
 	}
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 	if (slsi_netif_register(sdev, sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]) != 0) {
 		SLSI_ERR(sdev, "failed to register with p2px_wlan1 netdev\n");
 		goto err_p2p_registered;
@@ -381,7 +415,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 	if (slsi_netif_register(sdev, sdev->netdev[SLSI_NET_INDEX_NAN]) != 0) {
 		SLSI_ERR(sdev, "failed to register with NAN netdev\n");
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 		goto err_p2px_wlan_registered;
 #else
 		goto err_p2p_registered;
@@ -411,7 +445,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 		goto err_nan_registered;
 #else
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 		goto err_p2px_wlan_registered;
 #else
 		goto err_p2p_registered;
@@ -422,7 +456,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 #endif
 	}
 	INIT_WORK(&sdev->recovery_work_on_stop, slsi_failure_reset);
-#ifdef CONFIG_SCSC_WLAN_SILENT_RECOVERY
+#ifdef CONFIG_SCSC_WLAN_FAST_RECOVERY
 	INIT_WORK(&sdev->recovery_work, slsi_subsystem_reset);
 	INIT_WORK(&sdev->recovery_work_on_start, slsi_chip_recovery);
 #endif
@@ -434,7 +468,7 @@ err_nan_registered:
 #endif
 
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
-#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(ANDROID_VERSION) && ANDROID_VERSION >= 90000) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+#if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 err_p2px_wlan_registered:
 	slsi_netif_remove(sdev, sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]);
 	rcu_assign_pointer(sdev->netdev_ap, NULL);
@@ -463,20 +497,17 @@ err_udi_proc_init:
 
 err_hip_init:
 	slsi_hip_deinit(sdev);
-
-err_netif_init:
 	slsi_netif_deinit(sdev);
 
 err_ctrl_wq_init:
 	slsi_skb_work_deinit(&sdev->rx_dbg_sap);
 
 err_if:
-	slsi_wakelock_exit(&sdev->wlan_wl);
-	slsi_wakelock_exit(&sdev->wlan_wl_mlme);
-	slsi_wakelock_exit(&sdev->wlan_wl_ma);
-#if !defined SLSI_TEST_DEV && defined CONFIG_ANDROID
-	wake_lock_destroy(&sdev->wlan_wl_roam);
-#endif
+	slsi_wake_lock_destroy(&sdev->wlan_wl);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_mlme);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_ma);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_roam);
+
 	slsi_cfg80211_free(sdev);
 	return NULL;
 }
@@ -539,26 +570,19 @@ void slsi_dev_detach(struct slsi_dev *sdev)
 	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Stop Work Queues\n");
 	slsi_skb_work_deinit(&sdev->rx_dbg_sap);
 
-	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Clean up wakelock\n");
-	slsi_wakelock_exit(&sdev->wlan_wl);
-	slsi_wakelock_exit(&sdev->wlan_wl_mlme);
-	slsi_wakelock_exit(&sdev->wlan_wl_ma);
-#if !defined SLSI_TEST_DEV && defined CONFIG_ANDROID
-	wake_lock_destroy(&sdev->wlan_wl_roam);
-#endif
+	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Clean up wakelocks\n");
+	slsi_wake_lock_destroy(&sdev->wlan_wl);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_mlme);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_ma);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_roam);
 
 	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Free cfg80211\n");
 	slsi_cfg80211_free(sdev);
-
-	slsi_dbg_track_skb_report();
-	slsi_dbg_track_skb_reset();
 }
 
 int __init slsi_dev_load(void)
 {
 	SLSI_INFO_NODEV("Loading Maxwell Wi-Fi driver\n");
-
-	slsi_dbg_track_skb_init();
 
 	if (slsi_udi_init())
 		SLSI_INFO_NODEV("Failed to init udi - continuing\n");
@@ -573,7 +597,7 @@ int __init slsi_dev_load(void)
 	sap_test_init();
 
 /* Always create devnode if TW Android P on */
-#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000
+#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9
 	slsi_create_sysfs_macaddr();
 #endif
 	SLSI_INFO_NODEV("--- Maxwell Wi-Fi driver loaded successfully ---\n");
@@ -584,7 +608,7 @@ void __exit slsi_dev_unload(void)
 {
 	SLSI_INFO_NODEV("Unloading Maxwell Wi-Fi driver\n");
 
-#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 90000
+#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9
 	slsi_destroy_sysfs_macaddr();
 #endif
 	/* Unregister SAPs */
