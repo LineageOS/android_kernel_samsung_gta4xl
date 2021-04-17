@@ -87,8 +87,6 @@ int check_user_usb_string(const char *name,
 
 #define MAX_NAME_LEN	40
 #define MAX_USB_STRING_LANGS 2
-#define MAX_USB_STRING_LEN	126
-#define MAX_USB_STRING_WITH_NULL_LEN	(MAX_USB_STRING_LEN+1)
 
 static const struct usb_descriptor_header *otg_desc[2];
 
@@ -190,23 +188,25 @@ int dwc3_gadget_get_cmply_link_state_wrapper(void)
 EXPORT_SYMBOL(dwc3_gadget_get_cmply_link_state_wrapper);
 #endif
 
+#define USB_MAX_STRING_WITH_NULL_LEN	(USB_MAX_STRING_LEN+1)
+
 static int usb_string_copy(const char *s, char **s_copy)
 {
 	int ret;
 	char *str;
 	char *copy = *s_copy;
 	ret = strlen(s);
-	if (ret > MAX_USB_STRING_LEN)
+	if (ret > USB_MAX_STRING_LEN)
 		return -EOVERFLOW;
 
 	if (copy) {
 		str = copy;
 	} else {
-		str = kmalloc(MAX_USB_STRING_WITH_NULL_LEN, GFP_KERNEL);
+		str = kmalloc(USB_MAX_STRING_WITH_NULL_LEN, GFP_KERNEL);
 		if (!str)
 			return -ENOMEM;
 	}
-	strncpy(str, s, MAX_USB_STRING_WITH_NULL_LEN);
+	strncpy(str, s, USB_MAX_STRING_WITH_NULL_LEN);
 
 	if (str[ret - 1] == '\n')
 		str[ret - 1] = '\0';
