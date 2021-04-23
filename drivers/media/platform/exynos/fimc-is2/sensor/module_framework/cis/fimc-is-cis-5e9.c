@@ -1977,7 +1977,7 @@ static const struct i2c_device_id sensor_cis_5e9_idt[] = {
 	{},
 };
 
-static struct i2c_driver sensor_cis_5e9_driver = {
+static struct i2c_driver __refdata sensor_cis_5e9_driver = {
 	.probe	= cis_5e9_probe,
 	.driver = {
 		.name	= SENSOR_NAME,
