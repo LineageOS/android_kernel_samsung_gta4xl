@@ -2790,8 +2790,7 @@
 		target = <0xffffffff>;
 
 		__overlay__ {
-			status = "okay";
-			parts = "vbmeta,boot,system,vendor,product,odm,prism,optics,vbmeta_samsung,recovery,dtbo,keystorage";
+			status = "disabled";
 		};
 	};
 
