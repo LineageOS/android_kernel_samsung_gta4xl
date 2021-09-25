@@ -239,6 +239,9 @@ bool FAKE_POWER_KEY_SEND = true;
 	struct proc_dir_entry *himax_proc_HSEN_file = NULL;
 #endif
 
+bool himax_epen_mode = false;
+EXPORT_SYMBOL(himax_epen_mode);
+
 #if defined(HX_PALM_REPORT)
 static int himax_palm_detect(uint8_t *buf)
 {
@@ -2384,6 +2387,8 @@ static void himax_finger_report(struct himax_ts_data *ts)
 	int i = 0;
 	bool valid = false;
 
+	if (himax_epen_mode)
+		return;
 
 	if (g_ts_dbg != 0) {
 		I("%s:start\n", __func__);
