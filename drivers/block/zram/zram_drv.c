@@ -588,18 +588,20 @@ static void free_block_bdev(struct zram *zram, unsigned long blk_idx)
 {
 	int was_set;
 #ifdef CONFIG_ZRAM_COMP_WRITEBACK
-	spin_lock(&zram->wb_table_lock);
+	unsigned long flags;
+
+	spin_lock_irqsave(&zram->wb_table_lock, flags);
 	if (zram->wb_table[blk_idx] == 0) {
-		spin_unlock(&zram->wb_table_lock);
+		spin_unlock_irqrestore(&zram->wb_table_lock, flags);
 		return;
 	}
 	zram->wb_table[blk_idx]--;
 	atomic64_dec(&zram->stats.bd_objcnt);
 	if (zram->wb_table[blk_idx] > 0) {
-		spin_unlock(&zram->wb_table_lock);
+		spin_unlock_irqrestore(&zram->wb_table_lock, flags);
 		return;
 	}
-	spin_unlock(&zram->wb_table_lock);
+	spin_unlock_irqrestore(&zram->wb_table_lock, flags);
 #endif
 	was_set = test_and_clear_bit(blk_idx, zram->bitmap);
 	WARN_ON_ONCE(!was_set);
@@ -898,10 +900,11 @@ static void zram_handle_remain(struct zram *zram, struct page *page,
 	u8 *mem, *src, *dst;
 	int count = 0;
 	int i, max_count;
+	unsigned long flags;
 
-	spin_lock(&zram->wb_table_lock);
+	spin_lock_irqsave(&zram->wb_table_lock, flags);
 	max_count = zram->wb_table[blk_idx];
-	spin_unlock(&zram->wb_table_lock);
+	spin_unlock_irqrestore(&zram->wb_table_lock, flags);
 
 	mem = kmap_atomic(page);
 	for (i = 0; i < max_count; i++) {
@@ -1982,6 +1985,7 @@ static void zram_wb_done(struct zram *zram, unsigned long blk_idx,
 	unsigned int size;
 	unsigned int nr_freed = 0;
 	int i;
+	unsigned long flags;
 
 	for (i = 0; i < count; i++) {
 		index = entry[i].index;
@@ -2017,9 +2021,9 @@ static void zram_wb_done(struct zram *zram, unsigned long blk_idx,
 		zram_slot_unlock(zram, index);
 	}
 	count -= nr_freed;
-	spin_lock(&zram->wb_table_lock);
+	spin_lock_irqsave(&zram->wb_table_lock, flags);
 	zram->wb_table[blk_idx] = count;
-	spin_unlock(&zram->wb_table_lock);
+	spin_unlock_irqrestore(&zram->wb_table_lock, flags);
 	atomic64_add(count, &zram->stats.pages_stored);
 	atomic64_add(count, &zram->stats.bd_objcnt);
 }

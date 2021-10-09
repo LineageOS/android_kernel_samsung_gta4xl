@@ -25,6 +25,10 @@ struct pt_regs;
 
 extern void show_regs(struct pt_regs *);
 
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+extern void show_regs_auto_comment(struct pt_regs * regs, bool comm);
+#endif
+
 /*
  * TASK is a pointer to the task whose backtrace we want to see (or NULL for current
  * task), SP is the stack pointer of the first frame that should be shown in the back
