@@ -1234,13 +1234,6 @@ config RKP_NS_PROT
 	help
 	  Prevents unauthorized namespace modification.
 
-config RKP_NS_PROT_ROS
-	bool "Protection for namespace structure"
-	depends on RKP_NS_PROT
-	default n
-	help
-	  Prevents unauthorized namespace modification.
-
 config RKP_DMAP_PROT
 	bool "Page Double Mapping protection"
 	depends on RKP_KDP
