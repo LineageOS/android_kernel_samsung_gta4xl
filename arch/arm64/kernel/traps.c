@@ -168,7 +168,7 @@ void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 	put_task_stack(tsk);
 }
 #ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
-static void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct *tsk)
+void dump_backtrace_auto_summary(struct pt_regs *regs, struct task_struct *tsk)
 {
 	struct stackframe frame;
 	int skip = 0;
