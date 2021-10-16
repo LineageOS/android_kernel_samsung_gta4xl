@@ -351,7 +351,7 @@ static const unsigned char SEQ_SET_E4_CABC_BANK0_REWRITE[] = {
 /* platform brightness <-> bl reg */
 static unsigned int brightness_table[EXTEND_BRIGHTNESS + 1] = {
 	0,
-	0, 30, 40, 51, 62, 73, 84, 95, 106, 116, /* 2: 30 */
+	30, 30, 40, 51, 62, 73, 84, 95, 106, 116, /* 2: 30 */
 	127, 138, 149, 160, 171, 182, 193, 203, 214, 225,
 	236, 247, 258, 269, 280, 290, 301, 312, 323, 334,
 	345, 356, 367, 377, 388, 399, 410, 421, 432, 443,
