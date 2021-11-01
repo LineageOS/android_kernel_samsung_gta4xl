@@ -399,6 +399,8 @@ struct sec_battery_info {
 	int muic_cable_type;
 	int extended_cable_type;
 
+	bool pd_disable_by_afc_option;
+
 	bool auto_mode;
 
 	struct wake_lock cable_wake_lock;
@@ -418,6 +420,8 @@ struct sec_battery_info {
 	struct wake_lock wc_headroom_wake_lock;
 	struct wake_lock wpc_tx_wake_lock;
 	struct delayed_work wpc_tx_work;
+	struct delayed_work hv_disable_work;
+	struct wake_lock hv_disable_wake_lock;
 #if defined(CONFIG_UPDATE_BATTERY_DATA)
 	struct delayed_work batt_data_work;
 	struct wake_lock batt_data_wake_lock;
