@@ -1509,13 +1509,16 @@ static bool sm5713_fg_reg_init(struct sm5713_fuelgauge_data *fuelgauge, bool is_
 
 static int sm5713_abnormal_reset_check(struct sm5713_fuelgauge_data *fuelgauge)
 {
-	int cntl_read, reset_read;
+	int cntl_read, reset_read, table_len_read;
 
 	reset_read = sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_RESET) & 0xF000;
+	table_len_read = sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_PARAM_CTRL) & 0x001F;
+
 	/* abnormal case process */
-	if (sm5713_fg_check_reg_init_need(fuelgauge) || (reset_read == 0)) {
+	if (sm5713_fg_check_reg_init_need(fuelgauge) || (reset_read == 0) || (table_len_read != FG_TABLE_LEN)) {
 		cntl_read = sm5713_read_word(fuelgauge->i2c, SM5713_FG_REG_CNTL);
-		pr_info("%s: SM5713 FG abnormal case!!!! SM5713_REG_CNTL : 0x%x, is_FG_initialised : %d, reset_read : 0x%x\n", __func__, cntl_read, fuelgauge->info.is_FG_initialised, reset_read);
+		pr_info("%s: SM5713 FG abnormal case!!!! SM5713_REG_CNTL : 0x%x, is_FG_initialised : %d, reset_read : 0x%x, table_len_read : 0x%x\n",
+				__func__, cntl_read, fuelgauge->info.is_FG_initialised, reset_read, table_len_read);
 
 		if (fuelgauge->info.is_FG_initialised == 1) {
 			/* SW reset code */
