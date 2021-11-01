@@ -32,6 +32,10 @@ extern void show_regs(struct pt_regs *);
  */
 extern void show_stack(struct task_struct *task, unsigned long *sp);
 
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+extern void show_stack_auto_comment(struct task_struct *task, unsigned long *sp);
+#endif
+
 extern void sched_show_task(struct task_struct *p);
 
 #ifdef CONFIG_SCHED_DEBUG
