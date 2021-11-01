@@ -1,9 +1,9 @@
 /dts-v1/;
 
 / {
-	compatible = "samsung,GTA4XLWIFI EUR OPEN 04", "samsung,EXYNOS9611";
-	dtbo-hw_rev = <0x4>;
-	dtbo-hw_rev_end = <0x6>;
+	compatible = "samsung,GTA4XLWIFI EUR OPEN 04A", "samsung,EXYNOS9611";
+	dtbo-hw_rev = <0x8>;
+	dtbo-hw_rev_end = <0x8>;
 
 	fragment@0 {
 		target = <0xffffffff>;
@@ -1215,7 +1215,7 @@
 		__overlay__ {
 			#address-cells = <0x2>;
 			#size-cells = <0x1>;
-			model = "Samsung GTA4XLWIFI EUR OPEN 04 board based on EXYNOS9611";
+			model = "Samsung GTA4XLWIFI EUR OPEN 04A board based on EXYNOS9611";
 
 			sec-mst {
 				compatible = "sec-mst";
@@ -3981,21 +3981,6 @@
 		};
 	};
 
-	fragment@61 {
-		target = <0xffffffff>;
-
-		__overlay__ {
-
-			rt5665@1b {
-				realtek,sar-hs-type = <0x2bc>;
-				realtek,sar-pb-vth0 = <0x5f>;
-				realtek,sar-pb-vth1 = <0x8b>;
-				realtek,sar-pb-vth2 = <0xf6>;
-				realtek,sar-pb-vth3 = <0x244>;
-			};
-		};
-	};
-
 	__symbols__ {
 		decon_board_hx83102e = "/fragment@lcd/__overlay__/decon_board_hx83102e";
 		hx83102e = "/fragment@lcd/__overlay__/hx83102e";
@@ -4164,7 +4149,7 @@
 		pinctrl_4 = "/fragment@13:target:0", "/fragment@26:target:0", "/fragment@51:target:0", "/fragment@59:target:0";
 		spi_9 = "/fragment@14:target:0";
 		hsi2c_3 = "/fragment@15:target:0";
-		i2c_6 = "/fragment@16:target:0", "/fragment@61:target:0";
+		i2c_6 = "/fragment@16:target:0";
 		gpa1 = "/fragment@16/__overlay__/rt5665@1b:interrupt-parent:0", "/fragment@model/__overlay__/gpio_keys/button@2:gpios:0", "/fragment@model/__overlay__/gpio_keys/button@3:gpios:0", "/fragment@model/__overlay__/gpio_keys/button@4:gpios:0", "/fragment@model/__overlay__/wacom_hall:wacom_hall,gpio_wacom_cover:0";
 		gpm14 = "/fragment@model/__overlay__/sec-mst:sec-mst,mst-en-gpio:0";
 		gpm13 = "/fragment@model/__overlay__/sec-mst:sec-mst,mst-data-gpio:0";

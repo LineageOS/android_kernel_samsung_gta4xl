@@ -3,7 +3,7 @@
 / {
 	compatible = "samsung,GTA4XLWIFI EUR OPEN 04A", "samsung,EXYNOS9611";
 	dtbo-hw_rev = <0x7>;
-	dtbo-hw_rev_end = <0xff>;
+	dtbo-hw_rev_end = <0x7>;
 
 	fragment@0 {
 		target = <0xffffffff>;
@@ -2186,6 +2186,35 @@
 						level_0 {
 							threshold = <0x0>;
 							irq_affinity = "enable";
+						};
+					};
+				};
+
+				boot_device@4 {
+					net_boost,label = "WIFI TX";
+					net_boost,node = "wlan0";
+
+					net_boost,table {
+
+						level_0 {
+							threshold = <0x64>;
+							big_min = <0x1e26c0>;
+							lit_min = <0x143bb0>;
+							mif = <0xf78f0>;
+						};
+
+						level_1 {
+							threshold = <0x96>;
+							big_min = <0x215340>;
+							lit_min = <0x176830>;
+							mif = <0x14a140>;
+						};
+
+						level_2 {
+							threshold = <0xc8>;
+							big_min = <0x21b8d0>;
+							lit_min = <0x18fe70>;
+							mif = <0x14a140>;
 						};
 					};
 				};

@@ -2959,7 +2959,7 @@
 
 				overutil-level0 {
 					cpus = "0-3", "4-7";
-					ratio = <0x1e 0x28>;
+					ratio = <0x50 0x50>;
 				};
 
 				overutil-level1 {
