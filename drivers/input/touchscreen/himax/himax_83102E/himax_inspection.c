@@ -4791,23 +4791,51 @@ static void set_note_mode(void *dev_data)
 	I("%s: %s\n", __func__, buf);
 }
 
+void himax_set_cover_mode(struct himax_ts_data *ts, bool closed)
+{
+	u8 tmp_addr[4] = { 0 };
+	u8 sdata[4] = { 0 };
+	int ret;
+
+	if (atomic_read(&ts->suspend_mode) == 1) {
+		E("%s: %s, but IC is powered off\n", __func__, closed ? "on" : "off");
+		return;
+	}
+
+	himax_in_parse_assign_cmd(fw_addr_ctrl_fw, tmp_addr, sizeof(tmp_addr));
+	
+	if (closed)
+		sdata[0] = 0xC1;
+	else
+		sdata[0] = 0xC0;
+
+	I("%s: %s\n", __func__, closed ? "on" : "off");
+
+	ret = g_core_fp.fp_register_write(tmp_addr, sizeof(sdata), sdata, 0);
+	if (ret < 0)
+		E("%s: failed to write cover mode\n", __func__);
+}
+
 static void clear_cover_mode(void *dev_data)
 {
 	struct sec_cmd_data *sec = (struct sec_cmd_data *)dev_data;
+	struct himax_ts_data *ts = container_of(sec, struct himax_ts_data, sec);
 	char buf[16] = {0};
 
 	sec_cmd_set_default_result(sec);
 
 	switch (sec->cmd_param[0]) {
 	case 0:
+		ts->cover_closed = false;
 		sec->cmd_state = SEC_CMD_STATUS_OK;
-		I("%s: Sense on\n", __func__);
-		g_core_fp.fp_sense_on(0x01);
+		I("%s: Cover mode off\n", __func__);
+		himax_set_cover_mode(ts, ts->cover_closed);
 		break;
 	case 3:
+		ts->cover_closed = true;
 		sec->cmd_state = SEC_CMD_STATUS_OK;
-		I("%s: Sense off\n", __func__);
-		g_core_fp.fp_sense_off(true);
+		I("%s: Cover mode on\n", __func__);
+		himax_set_cover_mode(ts, ts->cover_closed);
 		break;
 	default:
 		sec->cmd_state = SEC_CMD_STATUS_FAIL;
