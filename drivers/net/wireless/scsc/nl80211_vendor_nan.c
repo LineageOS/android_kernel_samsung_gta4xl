@@ -53,8 +53,8 @@ void slsi_nan_dump_vif_data(struct slsi_dev *sdev, struct netdev_vif *ndev_vif)
 	SLSI_INFO(sdev, "local_nmi: " MACSTR ", cluster_id: " MACSTR "\n", MAC2STR(nan.local_nmi), MAC2STR(nan.cluster_id));
 	SLSI_INFO(sdev, "state: %d, role: %d, operating_channel: %d, %d\n", nan.state, nan.role,
 		  nan.operating_channel[0], nan.operating_channel[1]);
-	SLSI_INFO(sdev, "master_pref_value: %d, amr: %d, hopcount: %d\n", nan.master_pref_value, nan.amr,
-		  nan.hopcount);
+	SLSI_INFO(sdev, "master_pref_value: %d, amr: 0x%08x%08x, hopcount: %d\n",
+		  nan.master_pref_value, nan.amr_higher, nan.amr_lower, nan.hopcount);
 	SLSI_INFO(sdev, "random_mac_interval_sec: %d\n", nan.random_mac_interval_sec);
 	SLSI_INFO(sdev, "matchid: %d\n", nan.matchid);
 	while (disc_info) {
@@ -396,21 +396,18 @@ static int slsi_nan_get_sdea_params_nl(struct slsi_dev *sdev, struct slsi_nan_sd
 			SLSI_ERR(sdev, "Returning EINVAL TYPE:%d\n", nl_attr_id);
 			return -EINVAL;
 		}
-		sdea_params->config_nan_data_path = 1;
 		break;
 	case NAN_REQ_ATTR_SDEA_PARAM_RANGE_REPORT:
 		if (slsi_util_nla_get_u8(iter, &sdea_params->range_report)) {
 			SLSI_ERR(sdev, "Returning EINVAL TYPE:%d\n", nl_attr_id);
 			return -EINVAL;
 		}
-		sdea_params->config_nan_data_path = 1;
 		break;
 	case NAN_REQ_ATTR_SDEA_PARAM_QOS_CFG:
 		if (slsi_util_nla_get_u8(iter, &sdea_params->qos_cfg)) {
 			SLSI_ERR(sdev, "Returning EINVAL TYPE:%d\n", nl_attr_id);
 			return -EINVAL;
 		}
-		sdea_params->config_nan_data_path = 1;
 		break;
 	default:
 		return -EINVAL;
@@ -541,7 +538,7 @@ static int slsi_nan_enable_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_
 	int type, tmp;
 	const struct nlattr *iter;
 	u8 val = 0;
-	u32 random_interval = 0;
+	u32 random_interval = 0, channel_5g_val = 0;
 #ifdef SCSC_SEP_VERSION
 	struct net_device *dev = slsi_nan_get_netdev(sdev);
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
@@ -704,9 +701,9 @@ static int slsi_nan_enable_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_
 			break;
 
 		case NAN_REQ_ATTR_CHANNEL_5G_MHZ_VAL:
-			if (slsi_util_nla_get_u8(iter, &val))
+			if (slsi_util_nla_get_u32(iter, &channel_5g_val))
 				return -EINVAL;
-			hal_req->channel_5g_val = (int)val;
+			hal_req->channel_5g_val = (int)channel_5g_val;
 			hal_req->config_5g_channel = 1;
 			break;
 
@@ -764,11 +761,11 @@ static int slsi_nan_enable_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_
 				return -EINVAL;
 			break;
 		case NAN_REQ_ATTR_ENABLE_RANGING:
-			if (slsi_util_nla_get_u32(iter, &hal_req->enable_dw_early_termination))
+			if (slsi_util_nla_get_u32(iter, &hal_req->enable_ranging))
 				return -EINVAL;
 			break;
 		case NAN_REQ_ATTR_DW_EARLY_TERMINATION:
-			if (slsi_util_nla_get_u32(iter, &hal_req->enable_ranging))
+			if (slsi_util_nla_get_u32(iter, &hal_req->enable_dw_early_termination))
 				return -EINVAL;
 			break;
 		default:
@@ -1072,7 +1069,6 @@ static int slsi_nan_publish_get_nl_params(struct slsi_dev *sdev, struct slsi_hal
 				return -EINVAL;
 			}
 			break;
-
 		case NAN_REQ_ATTR_HAL_TRANSACTION_ID:
 			if (slsi_util_nla_get_u16(iter, &hal_req->transaction_id)) {
 				SLSI_ERR(sdev, "Returning EINVAL TYPE:%d\n", type);
@@ -1544,7 +1540,6 @@ static int slsi_nan_followup_get_nl_params(struct slsi_dev *sdev, struct slsi_ha
 {
 	int type, tmp;
 	const struct nlattr *iter;
-	u16 val = 0;
 
 	memset(hal_req, 0, sizeof(*hal_req));
 	nla_for_each_attr(iter, data, len, tmp) {
@@ -1556,9 +1551,8 @@ static int slsi_nan_followup_get_nl_params(struct slsi_dev *sdev, struct slsi_ha
 			break;
 
 		case NAN_REQ_ATTR_FOLLOWUP_REQUESTOR_ID:
-			if (slsi_util_nla_get_u16(iter, &val))
+			if (slsi_util_nla_get_u32(iter, &hal_req->requestor_instance_id))
 				return -EINVAL;
-			hal_req->requestor_instance_id = (u32)val;
 			break;
 
 		case NAN_REQ_ATTR_FOLLOWUP_ADDR:
@@ -1970,11 +1964,11 @@ static int slsi_nan_config_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_
 				return -EINVAL;
 			break;
 		case NAN_REQ_ATTR_ENABLE_RANGING:
-			if (slsi_util_nla_get_u32(iter, &hal_req->enable_dw_early_termination))
+			if (slsi_util_nla_get_u32(iter, &hal_req->enable_ranging))
 				return -EINVAL;
 			break;
 		case NAN_REQ_ATTR_DW_EARLY_TERMINATION:
-			if (slsi_util_nla_get_u32(iter, &hal_req->enable_ranging))
+			if (slsi_util_nla_get_u32(iter, &hal_req->enable_dw_early_termination))
 				return -EINVAL;
 			break;
 		default:
@@ -2969,9 +2963,6 @@ void slsi_nan_service_ind(struct slsi_dev *sdev, struct net_device *dev, struct 
 	memset(hal_evt, 0, sizeof(*hal_evt));
 	hal_evt->publish_subscribe_id = fapi_get_u16(skb, u.mlme_nan_service_ind.session_id);
 	hal_evt->requestor_instance_id = fapi_get_u16(skb, u.mlme_nan_service_ind.match_id);
-	/* This needs to be filled from tlv data as part of ranging. */
-	hal_evt->range_measurement_mm = 0;
-	hal_evt->ranging_event_type = 0;
 
 	SLSI_INFO(sdev, "pub_sub_id:%d, req_instance_id:%d, ranging_event:%d, range_measurement_mm:%d\n",
 		  hal_evt->publish_subscribe_id, hal_evt->requestor_instance_id, hal_evt->ranging_event_type,
@@ -2984,7 +2975,7 @@ void slsi_nan_service_ind(struct slsi_dev *sdev, struct net_device *dev, struct 
 	while (sig_data_len >= tag_len + 4) {
 		switch (tag_id) {
 		case SLSI_NAN_TLV_TAG_MATCH_IND:
-			if (tag_len < 0x11) {
+			if (tag_len < 0x15) {
 				SLSI_WARN(sdev, "Invalid taglen(%d) for SLSI_NAN_TLV_TAG_MATCH_IND\n", tag_len);
 				break;
 			}
@@ -2999,6 +2990,15 @@ void slsi_nan_service_ind(struct slsi_dev *sdev, struct net_device *dev, struct 
 			hal_evt->rssi_value = *tag_data_ptr;
 			tag_data_ptr++;
 			hal_evt->sec_info.cipher_type = *tag_data_ptr;
+			tag_data_ptr++;
+			hal_evt->peer_sdea_params.security_cfg = le16_to_cpu(*(u16 *)tag_data_ptr);
+			tag_data_ptr += 2;
+			hal_evt->peer_sdea_params.ranging_state = le16_to_cpu(*(u16 *)tag_data_ptr);
+			tag_data_ptr += 2;
+			hal_evt->range_measurement_mm = le32_to_cpu(*(u32 *)tag_data_ptr) * 10;
+			tag_data_ptr += 4;
+			hal_evt->ranging_event_type = *tag_data_ptr;
+			tag_data_ptr++;
 			break;
 		case SLSI_NAN_TLV_TAG_SERVICE_SPECIFIC_INFO:
 			hal_evt->service_specific_info_len = tag_len > SLSI_HAL_NAN_MAX_SERVICE_SPECIFIC_INFO_LEN ?
@@ -3096,6 +3096,8 @@ void slsi_nan_service_ind(struct slsi_dev *sdev, struct net_device *dev, struct 
 	res |= nla_put_u8(nl_skb, NAN_EVT_ATTR_MATCH_MATCH_OCCURRED_FLAG, hal_evt->match_occurred_flag);
 	res |= nla_put_u8(nl_skb, NAN_EVT_ATTR_MATCH_OUT_OF_RESOURCE_FLAG, hal_evt->out_of_resource_flag);
 	res |= nla_put_u8(nl_skb, NAN_EVT_ATTR_MATCH_RSSI_VALUE, hal_evt->rssi_value);
+	res |= nla_put_u8(nl_skb, NAN_EVT_ATTR_SDEA_PARAM_SECURITY_CONFIG, hal_evt->peer_sdea_params.security_cfg);
+	res |= nla_put_u8(nl_skb, NAN_EVT_ATTR_SDEA_PARAM_RANGE_STATE, hal_evt->peer_sdea_params.ranging_state);
 	res |= nla_put_u32(nl_skb, NAN_EVT_ATTR_RANGE_MEASUREMENT_MM, hal_evt->range_measurement_mm);
 	res |= nla_put_u32(nl_skb, NAN_EVT_ATTR_RANGEING_EVENT_TYPE, hal_evt->ranging_event_type);
 	res |= nla_put_u32(nl_skb, NAN_EVT_ATTR_SECURITY_CIPHER_TYPE, hal_evt->sec_info.cipher_type);
@@ -3540,32 +3542,39 @@ int slsi_send_nan_range_config(struct slsi_dev *sdev, u8 count, struct slsi_rtt_
 {
 	struct net_device *nan_dev = slsi_nan_get_netdev(sdev);
 	struct netdev_vif *nan_ndev_vif;
-	int r = -EINVAL;
+	int  r = 0;
+	bool is_locked = false;
 
 	if (!slsi_dev_nan_supported(sdev)) {
 		SLSI_ERR(sdev, "NAN not supported(mib:%d)\n", sdev->nan_enabled);
-		return WIFI_HAL_ERROR_NOT_SUPPORTED;
+		r = WIFI_HAL_ERROR_NOT_SUPPORTED;
+		goto exit;
 	}
 	if (!nan_dev) {
 		SLSI_ERR(sdev, "dev is NULL!!\n");
-		return r;
+		r = -EINVAL;
+		goto exit;
 	}
 	nan_ndev_vif = netdev_priv(nan_dev);
 	SLSI_MUTEX_LOCK(nan_ndev_vif->vif_mutex);
+	is_locked = true;
 #ifndef SLSI_TEST_DEV
 	if (!nan_ndev_vif->activated) {
 		SLSI_ERR(sdev, "NAN vif not activated\n");
-		SLSI_MUTEX_UNLOCK(nan_ndev_vif->vif_mutex);
-		return r;
+		r = -EINVAL;
+		goto exit;
 	}
 #endif
-	r = slsi_mlme_nan_range_req(sdev, nan_dev, count, nl_rtt_params);
+	if (r == 0)
+		r = slsi_mlme_nan_range_req(sdev, nan_dev, count, nl_rtt_params);
+exit:
 	if (r) {
 		kfree(sdev->rtt_id_params[rtt_id - 1]);
 		sdev->rtt_id_params[rtt_id - 1] = NULL;
 		SLSI_ERR_NODEV("Failed to set nan range config\n");
 	}
-	SLSI_MUTEX_UNLOCK(nan_ndev_vif->vif_mutex);
+	if (is_locked)
+		SLSI_MUTEX_UNLOCK(nan_ndev_vif->vif_mutex);
 	return r;
 }
 
@@ -3693,11 +3702,11 @@ void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_STATUS, value);
 		ip_ptr += 2;
 
+		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_NUM_PER_BURST_PEER, *ip_ptr);
 		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_MEASUREMENT_NUM, *ip_ptr++);
 		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_SUCCESS_NUM, *ip_ptr++);
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_BURST_NUM, 0);
 
-		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_NUM_PER_BURST_PEER, 0);
 		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_RETRY_AFTER_DURATION, 0);
 		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_TYPE, 2);
 
