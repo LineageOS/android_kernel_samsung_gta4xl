@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -393,7 +393,6 @@ u16 slsi_compute_chann_info(struct slsi_dev *sdev, u16 width, u16 center_freq0, 
 	return chann_info;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 u16 slsi_get_chann_info(struct slsi_dev *sdev, struct cfg80211_chan_def *chandef)
 {
 	u16 chann_info = 0;
@@ -440,20 +439,10 @@ int slsi_check_channelization(struct slsi_dev *sdev, struct cfg80211_chan_def *c
 		return -EINVAL;
 	}
 
-	if (wifi_sharing_channel_switched == 1) {
-		ref_flags = IEEE80211_CHAN_DISABLED
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3, 10, 13)
-			    | IEEE80211_CHAN_PASSIVE_SCAN
-#endif
-			    ;
-	} else {
-		ref_flags = IEEE80211_CHAN_DISABLED |
-			    IEEE80211_CHAN_RADAR
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3, 10, 13)
-			    | IEEE80211_CHAN_PASSIVE_SCAN
-#endif
-			    ;
-	}
+	if (wifi_sharing_channel_switched == 1)
+		ref_flags = IEEE80211_CHAN_DISABLED;
+	else
+		ref_flags = IEEE80211_CHAN_DISABLED | IEEE80211_CHAN_RADAR;
 
 	if (channel->flags & ref_flags) {
 		SLSI_ERR(sdev, "Invalid channel %d used to start AP\n", chandef->chan->center_freq);
@@ -477,45 +466,6 @@ int slsi_check_channelization(struct slsi_dev *sdev, struct cfg80211_chan_def *c
 	}
 	return -EINVAL;
 }
-
-#else
-u16 slsi_get_chann_info(struct slsi_dev *sdev, enum nl80211_channel_type channel_type)
-{
-	u16 chann_info;
-
-	SLSI_UNUSED_PARAMETER(sdev);
-
-	/* Channel Info
-	 * bits 0 ~ 7 : Channel Width (5, 10, 20, 40)
-	 * bit 8 : Set to 1 if primary channel is greater than secondary channel (HT Minus)
-	 */
-	switch (channel_type) {
-	case NL80211_CHAN_NO_HT:
-	case NL80211_CHAN_HT20:
-		chann_info = 20;
-		break;
-	case NL80211_CHAN_HT40MINUS:
-		chann_info = 40 | SLSI_CHANN_INFO_HT_SCB;
-		break;
-	case NL80211_CHAN_HT40PLUS:
-		chann_info = 40;
-		break;
-	default:
-		SLSI_WARN(sdev, "Unknown channel_type: %d\n", channel_type);
-		chann_info = 0;
-		break;
-	}
-
-	SLSI_DBG3(sdev, SLSI_MLME, "channel_type:%d, chann_info:0x%x\n", channel_type, chann_info);
-	return chann_info;
-}
-
-int slsi_check_channelization(struct slsi_dev *sdev, enum nl80211_channel_type channel_type)
-{
-	return 0;
-}
-
-#endif
 
 /* Called in the case of MIB SET errors.
  * Decode and print a MIB buffer to the log for debug purposes.
@@ -632,8 +582,7 @@ int slsi_mlme_set_ip_address(struct slsi_dev *sdev, struct net_device *dev)
 	return r;
 }
 
-#ifndef CONFIG_SCSC_WLAN_BLOCK_IPV6
-
+#if IS_ENABLED(CONFIG_IPV6)
 int slsi_mlme_set_ipv6_address(struct slsi_dev *sdev, struct net_device *dev)
 {
 	struct sk_buff    *req;
@@ -698,6 +647,9 @@ int slsi_mlme_set(struct slsi_dev *sdev, struct net_device *dev, u8 *mib, int mi
 		struct netdev_vif *ndev_vif = netdev_priv(dev);
 
 		ifnum = ndev_vif->ifnum;
+
+		if (ifnum && !ndev_vif->is_available)
+			return -ENODEV;
 	}
 
 	req = fapi_alloc(mlme_set_req, MLME_SET_REQ, ifnum, mib_len);
@@ -735,6 +687,9 @@ int slsi_mlme_get(struct slsi_dev *sdev, struct net_device *dev, u8 *mib, int mi
 		struct netdev_vif *ndev_vif = netdev_priv(dev);
 
 		ifnum = ndev_vif->ifnum;
+
+		if (ifnum && !ndev_vif->is_available)
+			return -ENODEV;
 	}
 	req = fapi_alloc(mlme_get_req, MLME_GET_REQ, ifnum, mib_len);
 	if (!req)
@@ -787,10 +742,10 @@ int slsi_mlme_add_vif(struct slsi_dev *sdev, struct net_device *dev, u8 *interfa
 	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->vif_mutex));
 	if (sdev->require_vif_delete[ndev_vif->ifnum]) {
 		r = slsi_mlme_del_vif(sdev, dev);
-		if (r != 0) {
+		if (r != 0)
 			SLSI_NET_ERR(dev, "slsi_mlme_del_vif before add_vif failed\n");
-			return r;
-		}
+		else
+			sdev->require_vif_delete[ndev_vif->ifnum] = false;
 	}
 
 	/* reset host stats */
@@ -815,7 +770,6 @@ int slsi_mlme_add_vif(struct slsi_dev *sdev, struct net_device *dev, u8 *interfa
 			     fapi_get_u16(cfm, u.mlme_add_vif_cfm.result_code));
 		r = -EINVAL;
 	}
-
 	/* By default firmware vif will be in active mode */
 	ndev_vif->power_mode = FAPI_POWERMANAGEMENTMODE_ACTIVE_MODE;
 #ifdef CONFIG_SCSC_WLAN_ARP_FLOW_CONTROL
@@ -830,6 +784,76 @@ int slsi_mlme_add_vif(struct slsi_dev *sdev, struct net_device *dev, u8 *interfa
 #endif
 	kfree_skb(cfm);
 	return r;
+}
+
+int slsi_mlme_add_detect_vif(struct slsi_dev *sdev, struct net_device *dev, u8 *interface_address, u8 *device_address)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct sk_buff    *req;
+	struct sk_buff    *cfm;
+	int               r = 0;
+
+	if (slsi_is_test_mode_enabled()) {
+		SLSI_NET_INFO(dev, "WlanLite SKIP MLME_ADD_VIF.request\n");
+		return -EOPNOTSUPP;
+	}
+
+	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->vif_mutex));
+	req = fapi_alloc(mlme_add_vif_req, MLME_ADD_VIF_REQ, SLSI_NET_INDEX_DETECT, 0);
+	if (!req)
+		return -ENOMEM;
+	fapi_set_u16(req, u.mlme_add_vif_req.virtual_interface_type, FAPI_VIFTYPE_DETECT);
+	fapi_set_memcpy(req, u.mlme_add_vif_req.interface_address, interface_address);
+	fapi_set_memcpy(req, u.mlme_add_vif_req.device_address, device_address);
+	SLSI_NET_DBG2(dev, SLSI_MLME, "mlme_add_vif_req (detect vif) (vif:%d)\n", FAPI_VIFTYPE_DETECT);
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_ADD_VIF_CFM);
+	if (!cfm)
+		return -EIO;
+
+	if (fapi_get_u16(cfm, u.mlme_add_vif_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_NET_ERR(dev, "mlme_add_vif_cfm (detect vif) (result:0x%04x) ERROR\n",
+			     fapi_get_u16(cfm, u.mlme_add_vif_cfm.result_code));
+		r = -EINVAL;
+	}
+
+	kfree_skb(cfm);
+	return r;
+}
+
+int slsi_mlme_del_detect_vif(struct slsi_dev *sdev, struct net_device *dev)
+{
+	struct sk_buff    *req;
+	struct sk_buff    *cfm;
+	int ret = 0;
+
+	if (slsi_is_test_mode_enabled()) {
+		SLSI_INFO_NODEV("WlanLite SKIP MLME_DEL_VIF.request\n");
+		return ret;
+	}
+
+	if (!sdev->detect_vif_active)
+		return ret;
+
+	SLSI_DBG4_NODEV(SLSI_MLME, "del_detect_vif vif:%d, mlme_blocked:%s\n", SLSI_NET_INDEX_DETECT,
+			sdev->mlme_blocked ? "true" : "false");
+	if (sdev->mlme_blocked)
+		return ret;
+	req = fapi_alloc(mlme_del_vif_req, MLME_DEL_VIF_REQ, SLSI_NET_INDEX_DETECT, 0);
+	if (!req)
+		return -ENOMEM;
+
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_DEL_VIF_CFM);
+	if (!cfm)
+		return -EIO;
+
+	if (fapi_get_u16(cfm, u.mlme_del_vif_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_ERR_NODEV("mlme_del_vif_cfm(result:0x%04x) ERROR\n",
+			       fapi_get_u16(cfm, u.mlme_del_vif_cfm.result_code));
+		ret = -EINVAL;
+	}
+
+	kfree_skb(cfm);
+	return ret;
 }
 
 int slsi_mlme_del_vif(struct slsi_dev *sdev, struct net_device *dev)
@@ -1405,19 +1429,17 @@ int slsi_mlme_add_sched_scan(struct slsi_dev                    *sdev,
 	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->scan_mutex));
 
 #ifdef CONFIG_SCSC_WLAN_ENABLE_MAC_RANDOMISATION
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
-		if (request->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
-			if (sdev->fw_mac_randomization_enabled) {
-				memcpy(sdev->scan_mac_addr, request->mac_addr, ETH_ALEN);
-				r = slsi_set_mac_randomisation_mask(sdev, request->mac_addr_mask);
-				if (!r)
-					sdev->scan_addr_set = 1;
-			} else {
-				SLSI_NET_INFO(dev, "Mac Randomization is not enabled in Firmware\n");
-				sdev->scan_addr_set = 0;
-			}
+	if (request->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
+		if (sdev->fw_mac_randomization_enabled) {
+			memcpy(sdev->scan_mac_addr, request->mac_addr, ETH_ALEN);
+			r = slsi_set_mac_randomisation_mask(sdev, request->mac_addr_mask);
+			if (!r)
+				sdev->scan_addr_set = 1;
+		} else {
+			SLSI_NET_INFO(dev, "Mac Randomization is not enabled in Firmware\n");
+			sdev->scan_addr_set = 0;
 		}
-#endif
+	}
 #endif
 
 	alloc_data_size += sizeof(scan_timing_ie) + ies_len + SLSI_SCAN_PRIVATE_IE_CHANNEL_LIST_HEADER_LEN +
@@ -1451,7 +1473,7 @@ int slsi_mlme_add_sched_scan(struct slsi_dev                    *sdev,
 #ifdef CONFIG_SCSC_WLAN_EXPONENTIAL_SCHED_SCAN
 	/* 16th byte (index 15): exponent, 17th byte (index 16): step count */
 	SLSI_U32_TO_BUFF_LE(request->scan_plans[0].interval * 1000 * 1000, &scan_timing_ie[7]);
-	if (request->scan_plans[0].interval < request->scan_plans[1].interval) {
+	if (request->n_scan_plans > 1 && request->scan_plans[0].interval < request->scan_plans[1].interval) {
 		SLSI_U32_TO_BUFF_LE(request->scan_plans[1].interval * 1000 * 1000, &scan_timing_ie[11]);
 		scan_timing_ie[15] = request->scan_plans[1].interval / request->scan_plans[0].interval;
 		scan_timing_ie[16] = request->scan_plans[0].iterations;
@@ -1687,7 +1709,6 @@ int slsi_mlme_del_scan(struct slsi_dev *sdev, struct net_device *dev, u16 scan_i
 	return r;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 static void slsi_ap_add_ext_capab_ie(struct sk_buff *req, struct netdev_vif *ndev_vif, const u8 *prev_ext)
 {
 	u8  ext_capa_ie[SLSI_AP_EXT_CAPAB_IE_LEN_MAX];
@@ -1709,7 +1730,6 @@ static void slsi_ap_add_ext_capab_ie(struct sk_buff *req, struct netdev_vif *nde
 
 	fapi_append_data(req, &ext_capa_ie[0], SLSI_AP_EXT_CAPAB_IE_LEN_MAX);
 }
-#endif
 
 static int slsi_prepare_country_ie(struct slsi_dev *sdev, u16 center_freq, u8 *country_ie, u8 **new_country_ie)
 {
@@ -1869,7 +1889,6 @@ static void slsi_mlme_start_prepare_ies(struct sk_buff *req, struct netdev_vif *
 		tail_pos = beacon_tail;
 	}
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 	/* Add Ext Capab IE only for VHT mode for now */
 	if (ndev_vif->chandef->width == NL80211_CHAN_WIDTH_80) {
 		/* Ext Capab should be before VHT IEs */
@@ -1889,12 +1908,8 @@ static void slsi_mlme_start_prepare_ies(struct sk_buff *req, struct netdev_vif *
 		} else {
 		fapi_append_data(req, tail_pos, tail_length);
 	}
-#else
-	fapi_append_data(req, tail_pos, tail_length);
-#endif
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 /*EID + LEN + CAPABILITIES + MCS */
 /* 1+1+4+8 */
 #define SLSI_VHT_CAPABILITIES_IE_LEN 14
@@ -1939,7 +1954,6 @@ static int slsi_prepare_vht_ies(struct net_device *dev, u8 **vht_ie_capab, u8 **
 
 	return 0;
 }
-#endif
 
 int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, struct cfg80211_ap_settings *settings, const u8 *wpa_ie_pos, const u8 *wmm_ie_pos, bool append_vht_ies)
 {
@@ -1957,10 +1971,8 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 	u8                     ext_capab_len = 0;
 	u32                    channel_encode = 0;
 	const u8			     *recv_vht_capab_ie, *recv_vht_operation_ie;
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 	u8                     *vht_ie_capab, *vht_ie_operation;
-#endif
+
 	SLSI_UNUSED_PARAMETER(bssid);
 
 	if (slsi_is_test_mode_enabled()) {
@@ -1993,7 +2005,6 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 
 	SLSI_NET_DBG1(dev, SLSI_MLME, "mlme_start_req(vif:%u, bssid:%pM, ssid:%.*s, hidden:%d)\n", ndev_vif->ifnum, bssid, (int)settings->ssid_len, settings->ssid, settings->hidden_ssid);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 	if (append_vht_ies) {
 		vht_ies_len = SLSI_VHT_CAPABILITIES_IE_LEN + SLSI_VHT_OPERATION_IE_LEN;
 
@@ -2014,7 +2025,6 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 		SLSI_NET_DBG1(dev, SLSI_MLME, "VHT - Ext Capab IE to be included\n");
 		ext_capab_len = SLSI_AP_EXT_CAPAB_IE_LEN_MAX;
 	}
-#endif
 
 	if (settings->hidden_ssid == 1)
 		req = fapi_alloc(mlme_start_req, MLME_START_REQ, ndev_vif->ifnum, settings->ssid_len + beacon_ie_head_len + settings->beacon.tail_len + vht_ies_len + ext_capab_len);
@@ -2033,11 +2043,7 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 	fapi_set_u32(req, u.mlme_start_req.spare_1, channel_encode);
 
 	fw_freq = ndev_vif->chan->center_freq;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 	chan_info = slsi_get_chann_info(sdev, ndev_vif->chandef);
-#else
-	chan_info = slsi_get_chann_info(sdev, ndev_vif->channel_type);
-#endif
 	if ((chan_info & 20) != 20)
 		fw_freq = slsi_get_center_freq1(sdev, chan_info, fw_freq);
 
@@ -2067,14 +2073,12 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 	if (settings->beacon.tail_len)
 		slsi_mlme_start_prepare_ies(req, ndev_vif, settings, wpa_ie_pos, wmm_ie_pos);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 	if ((append_vht_ies) && !slsi_prepare_vht_ies(dev, &vht_ie_capab, &vht_ie_operation)) {
 		fapi_append_data(req, vht_ie_capab, SLSI_VHT_CAPABILITIES_IE_LEN);
 		fapi_append_data(req, vht_ie_operation, SLSI_VHT_OPERATION_IE_LEN);
 		kfree(vht_ie_capab);
 		kfree(vht_ie_operation);
 	}
-#endif
 
 	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_START_CFM);
 	if (!cfm)
@@ -2089,10 +2093,14 @@ int slsi_mlme_start(struct slsi_dev *sdev, struct net_device *dev, u8 *bssid, st
 	return r;
 }
 
-static const u8 *slsi_mlme_connect_get_sec_ie(struct cfg80211_connect_params *sme, int *sec_ie_len)
+static const u8 *slsi_mlme_connect_get_sec_ie(struct cfg80211_connect_params *sme, int *sec_ie_len, bool *rsnx_flag)
 {
 	u16      version;
-	const u8 *ptr = NULL;
+	const u8 *ptr  = NULL;
+	const u8 *ptr_rsnx = NULL;
+	u8       *sec_ie = NULL;
+	int      ie_len = 0;
+	int      rsnx_ie_len = 0;
 
 	if (sme->crypto.wpa_versions == 0) {
 		/* WAPI */
@@ -2116,8 +2124,26 @@ static const u8 *slsi_mlme_connect_get_sec_ie(struct cfg80211_connect_params *sm
 				return NULL;
 			}
 		}
+
+		ptr_rsnx = cfg80211_find_ie(SLSI_WLAN_EID_RSNX, sme->ie, sme->ie_len);
+		rsnx_ie_len = (ptr_rsnx ? ptr_rsnx[1] + 2 : 0);
 	}
-	*sec_ie_len = ptr ? ptr[1] + 2 : 0;
+	ie_len = (ptr ? ptr[1] + 2 : 0);
+	*sec_ie_len = ie_len + rsnx_ie_len;
+	if (*sec_ie_len == 0)
+		return NULL;
+	if (ptr_rsnx && rsnx_ie_len > 0) {
+		sec_ie = kmalloc((size_t)*sec_ie_len, GFP_KERNEL);
+		if (!sec_ie) {
+			SLSI_ERR_NODEV("Error alocating sec_ie\n");
+			*sec_ie_len = 0;
+			return NULL;
+		}
+		memcpy(sec_ie, ptr, ie_len);
+		memcpy(sec_ie + ie_len, ptr_rsnx, rsnx_ie_len);
+		*rsnx_flag = true;
+		return sec_ie;
+	}
 	return ptr;
 }
 
@@ -2129,7 +2155,7 @@ static int slsi_mlme_connect_info_elems_ie_prep(struct slsi_dev *sdev, const u8 
 {
 	const u8 *ie_pos = NULL;
 	int      info_elem_length = 0;
-	u16      curr_ie_len;
+	u16      curr_ie_len, rem_len;
 	int i = 0;
 	u8 ie_eid[] = {SLSI_WLAN_EID_INTERWORKING,
 		       SLSI_WLAN_EID_EXTENSION,
@@ -2140,11 +2166,8 @@ static int slsi_mlme_connect_info_elems_ie_prep(struct slsi_dev *sdev, const u8 
 
 	for (i = 0; i < sizeof(ie_eid) / sizeof(u8); i++) {
 		ie_pos = cfg80211_find_ie(ie_eid[i], connect_ie, connect_ie_len);
-		if (ie_pos) {
-			if (ie_eid[i] == WLAN_EID_VENDOR_SPECIFIC)  /*Vendor IE will be the last element  */
-				curr_ie_len = connect_ie_len - (ie_pos - connect_ie);
-			else
-				curr_ie_len = *(ie_pos + 1) + 2;
+		while (ie_pos) {
+			curr_ie_len = *(ie_pos + 1) + 2;
 			SLSI_DBG2(sdev, SLSI_MLME, "IE[%d] is present having length:%d\n", ie_eid[i], curr_ie_len);
 			if (is_copy) {
 				if (ie_dest_len >= curr_ie_len) {
@@ -2154,12 +2177,15 @@ static int slsi_mlme_connect_info_elems_ie_prep(struct slsi_dev *sdev, const u8 
 					ie_dest_len -= curr_ie_len;
 				} else {
 					SLSI_ERR_NODEV("IE[%d] extract error (ie_copy_l:%d, c_ie_l:%d):\n", ie_eid[i],
-						       ie_dest_len, curr_ie_len);
+							ie_dest_len, curr_ie_len);
 					return -EINVAL;
 				}
-			} else {
+			} else
 				info_elem_length += curr_ie_len;
-			}
+
+			ie_pos += curr_ie_len;
+			rem_len = connect_ie_len - (ie_pos - connect_ie);
+			ie_pos = cfg80211_find_ie(ie_eid[i], ie_pos, rem_len);
 		}
 	}
 
@@ -2266,6 +2292,7 @@ int slsi_mlme_connect(struct slsi_dev *sdev, struct net_device *dev, struct cfg8
 	struct key_params      slsi_key;
 	const u8               *sec_ie = NULL;
 	int                    sec_ie_len = 0;
+	bool                   rsnx_ie_flag = false;
 
 	memset(&slsi_key, 0, sizeof(slsi_key));
 
@@ -2332,7 +2359,7 @@ int slsi_mlme_connect(struct slsi_dev *sdev, struct net_device *dev, struct cfg8
 		if (r)
 			return r;
 
-		sec_ie = slsi_mlme_connect_get_sec_ie(sme, &sec_ie_len);
+		sec_ie = slsi_mlme_connect_get_sec_ie(sme, &sec_ie_len, &rsnx_ie_flag);
 		if (sec_ie_len < 0) {
 			SLSI_NET_ERR(dev, "ERROR preparing Security IEs\n");
 			return sec_ie_len;
@@ -2363,6 +2390,8 @@ int slsi_mlme_connect(struct slsi_dev *sdev, struct net_device *dev, struct cfg8
 
 	if (sec_ie_len)
 		memcpy(p, sec_ie, sec_ie_len);
+	if (rsnx_ie_flag && sec_ie)
+		kfree(sec_ie);
 	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_CONNECT_CFM);
 	if (!cfm)
 		return -EIO;
@@ -2804,7 +2833,7 @@ void slsi_decode_fw_rate(u32 fw_rate, struct rate_info *rate, unsigned long *dat
 		nss = ((SLSI_FW_API_RATE_VHT_NSS_FIELD & fw_rate) >> 4) + 1;
 		mcs_idx = SLSI_FW_API_RATE_VHT_MCS_FIELD & fw_rate;
 		/* Bandwidth (BW): 0x0= 20 MHz, 0x1= 40 MHz, 0x2= 80 MHz, 0x3= 160/ 80+80 MHz. 0x3 is not supported */
-		if ((chan_bw_idx <= 2) && (mcs_idx <= 9)) {
+		if ((chan_bw_idx <= 2) && (mcs_idx <= 11)) {
 			if (rate)
 				rate->legacy = nss * slsi_rates_table[chan_bw_idx][gi_idx][mcs_idx];
 			if (data_rate_mbps)
@@ -3241,7 +3270,7 @@ int slsi_mlme_synchronised_response(struct slsi_dev *sdev, struct net_device *de
 			SLSI_NET_ERR(dev, "Received cfm for MLME_SYNCHRONISED_RES\n");
 	} else
 		SLSI_NET_DBG1(dev, SLSI_MLME, "vif is not active");
-#ifdef CONFIG_SCSC_WLAN_BSS_SELECTION
+#if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
 	ndev_vif->sta.wpa3_auth_state = SLSI_WPA3_AUTHENTICATED;
 #endif
 
@@ -3786,7 +3815,6 @@ int slsi_mlme_set_cached_channels(struct slsi_dev *sdev, struct net_device *dev,
 	return r;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 9))
 int slsi_mlme_set_acl(struct slsi_dev *sdev, struct net_device *dev, u16 ifnum,
 		      enum nl80211_acl_policy acl_policy, int max_acl_entries,
 		      struct mac_address mac_addrs[])
@@ -3835,7 +3863,6 @@ int slsi_mlme_set_acl(struct slsi_dev *sdev, struct net_device *dev, u16 ifnum,
 	kfree_skb(cfm);
 	return r;
 }
-#endif
 
 int slsi_mlme_set_traffic_parameters(struct slsi_dev *sdev, struct net_device *dev, u16 user_priority, u16 medium_time, u16 minimun_data_rate, u8 *mac)
 {
@@ -4661,6 +4688,33 @@ exit:
 }
 #endif
 
+int slsi_mlme_start_detect_request(struct slsi_dev *sdev, struct net_device *dev)
+{
+	struct sk_buff    *req;
+	struct sk_buff    *cfm;
+	int               r = 0;
+
+	SLSI_NET_DBG2(dev, SLSI_MLME, "mlme_start_detect_req(vif:%u)\n", SLSI_NET_INDEX_DETECT);
+	req = fapi_alloc(mlme_start_detect_req, MLME_START_DETECT_REQ, SLSI_NET_INDEX_DETECT, 0);
+	if (!req) {
+		SLSI_NET_ERR(dev, "fapi alloc failure\n");
+		return -ENOMEM;
+	}
+
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_START_DETECT_CFM);
+	if (!cfm)
+		return -EIO;
+
+	if (fapi_get_u16(cfm, u.mlme_start_detect_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_NET_ERR(dev, "mlme_start_detect_cfm(result:0x%04x) ERROR\n",
+			     fapi_get_u16(cfm, u.mlme_start_detect_cfm.result_code));
+		r = -EINVAL;
+	}
+
+	kfree_skb(cfm);
+	return r;
+}
+
 #define SLSI_TEST_CONFIG_MONITOR_MODE_DESCRIPTOR_SIZE	(12)
 int slsi_test_sap_configure_monitor_mode(struct slsi_dev *sdev, struct net_device *dev, struct cfg80211_chan_def *chandef)
 {
@@ -4798,6 +4852,11 @@ int slsi_mlme_set_country(struct slsi_dev *sdev, char *alpha2)
 	int error = 0;
 	int freq_range = 0;
 
+	if (slsi_is_test_mode_enabled()) {
+		SLSI_WARN(sdev, "WlanLite: NOT supported\n");
+		return -EOPNOTSUPP;
+	}
+
 	if (sdev->regdb.regdb_state == SLSI_REG_DB_SET) {
 		for (i = 0; i < sdev->regdb.num_countries; i++) {
 			if ((sdev->regdb.country[i].alpha2[0] == alpha2[0]) &&
@@ -4911,3 +4970,106 @@ void slsi_mlme_set_country_for_recovery(struct slsi_dev *sdev)
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 }
 #endif
+
+#ifdef CONFIG_SCSC_WLAN_NUM_ANTENNAS
+/* Note : netdev_vif lock should be taken care by caller. */
+int slsi_mlme_set_num_antennas(struct net_device *dev, const u16 num_of_antennas, int frame_type)
+{
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct slsi_dev   *sdev = ndev_vif->sdev;
+	struct sk_buff    *req;
+	struct sk_buff    *cfm;
+	int               ret = 0;
+	const bool        is_sta = (ndev_vif->iftype == NL80211_IFTYPE_STATION);
+	const bool        is_softap = (ndev_vif->iftype == NL80211_IFTYPE_AP);
+
+	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->vif_mutex));
+
+	if (num_of_antennas > 2 || num_of_antennas == 0) {
+		SLSI_NET_ERR(dev, "Invalid num_of_antennas %hu\n", num_of_antennas);
+		return -EINVAL;
+	}
+	if (frame_type < 0 || frame_type > 2) {
+		SLSI_ERR(sdev, "Invalid frame_type: '%d'\n", frame_type);
+		return -EINVAL;
+	}
+	if (!is_sta && !is_softap) {
+		SLSI_NET_ERR(dev, "Invalid interface type %s\n", dev->name);
+		return -EPERM;
+	}
+	if (is_sta && (ndev_vif->sta.vif_status != SLSI_VIF_STATUS_CONNECTED)) {
+		SLSI_NET_ERR(dev, "sta is not in connected state\n");
+		return -EPERM;
+	}
+	SLSI_NET_INFO(dev, "SetNumAntennas(vif:%u NumAntenna:%u ftype:%d)\n",
+		      ndev_vif->ifnum, num_of_antennas, frame_type);
+
+	req = fapi_alloc(mlme_set_num_antennas_req, MLME_SET_NUM_ANTENNAS_REQ, ndev_vif->ifnum, 0);
+	if (!req) {
+		SLSI_NET_ERR(dev, "failed to alloc set num antennas request\n");
+		return -ENOMEM;
+	}
+	fapi_set_u16(req, u.mlme_set_num_antennas_req.vif, ndev_vif->ifnum);
+	fapi_set_u16(req, u.mlme_set_num_antennas_req.number_of_antennas, num_of_antennas);
+	fapi_set_u16(req, u.mlme_set_num_antennas_req.spare_1, frame_type);
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_SET_NUM_ANTENNAS_CFM);
+	if (!cfm)
+		return -EIO;
+
+	if (fapi_get_u16(cfm, u.mlme_set_num_antennas_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_NET_ERR(dev, "SetNumAntennasCfm(result:0x%04x) ERROR\n",
+			     fapi_get_u16(cfm, u.mlme_set_num_antennas_cfm.result_code));
+		ret = -EINVAL;
+	}
+	kfree_skb(cfm);
+	return ret;
+}
+#endif
+
+int slsi_mlme_set_multicast_ip(struct slsi_dev *sdev, struct net_device *dev, __be32 multicast_ip_list[], int count)
+{
+	struct sk_buff    *req;
+	struct netdev_vif *ndev_vif = netdev_priv(dev);
+	struct sk_buff    *cfm;
+	int               r = 0;
+	u32               ipaddr;
+	u8                multicast_add[ETH_ALEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+	u8 length = count * 4 + 5;
+	size_t         alloc_data_size = 0;
+	u8             fapi_ie_generic[] = { 0xdd, length, 0x00, 0x16, 0x32, 0x03, 0x01 };
+	int i = 0;
+	u16 version_info = 0x0100;
+
+	if (slsi_is_test_mode_enabled()) {
+		SLSI_NET_INFO(dev, "Skip sending signal, WlanLite FW does not support MLME_SET_IP_ADDRESS.request\n");
+		return -EOPNOTSUPP;
+	}
+
+	WARN_ON(!SLSI_MUTEX_IS_LOCKED(ndev_vif->vif_mutex));
+
+	alloc_data_size = length + 2;
+	req = fapi_alloc(mlme_set_ip_address_req, MLME_SET_IP_ADDRESS_REQ, ndev_vif->ifnum, alloc_data_size);
+	if (!req)
+		return -ENOMEM;
+
+	fapi_set_u16(req, u.mlme_set_ip_address_req.ip_version, version_info);
+	fapi_set_memcpy(req, u.mlme_set_ip_address_req.multicast_address, multicast_add);
+
+	fapi_append_data(req, fapi_ie_generic, sizeof(fapi_ie_generic));
+	for (i = 0; i < count; i++) {
+		ipaddr = htonl(be32_to_cpu(multicast_ip_list[i]));
+		fapi_append_data(req, (const u8 *)(&ipaddr), sizeof(ipaddr));
+	}
+
+	SLSI_DBG2(sdev, SLSI_MLME, "slsi_mlme_set_ip_address(vif: %d)\n", ndev_vif->ifnum);
+	cfm = slsi_mlme_req_cfm(sdev, dev, req, MLME_SET_IP_ADDRESS_CFM);
+	if (!cfm)
+		return -EIO;
+
+	if (fapi_get_u16(cfm, u.mlme_set_ip_address_cfm.result_code) != FAPI_RESULTCODE_SUCCESS) {
+		SLSI_NET_ERR(dev, "mlme_set_ip_address_cfm(result:0x%04x) ERROR\n", fapi_get_u16(cfm, u.mlme_set_ip_address_cfm.result_code));
+		r = -EINVAL;
+	}
+	kfree_skb(cfm);
+	return r;
+}

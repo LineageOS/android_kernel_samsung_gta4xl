@@ -239,7 +239,7 @@ static int slsi_dev_inetaddr_changed(struct notifier_block *nb, unsigned long da
 	return 0;
 }
 
-#ifndef CONFIG_SCSC_WLAN_BLOCK_IPV6
+#if IS_ENABLED(CONFIG_IPV6)
 static int slsi_dev_inet6addr_changed(struct notifier_block *nb, unsigned long data, void *arg)
 {
 	struct slsi_dev     *sdev = container_of(nb, struct slsi_dev, inet6addr_notifier);
@@ -281,6 +281,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 
 	sdev->mlme_blocked = false;
 	sdev->wlan_service_on = 0;
+	sdev->require_service_close = false;
 
 	SLSI_MUTEX_INIT(sdev->netdev_add_remove_mutex);
 	mutex_init(&sdev->netdev_remove_mutex);
@@ -288,6 +289,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 	SLSI_MUTEX_INIT(sdev->device_config_mutex);
 	SLSI_MUTEX_INIT(sdev->logger_mutex);
 	slsi_spinlock_create(&sdev->netdev_lock);
+	slsi_spinlock_create(&sdev->wake_stats_lock);
 	sdev->dev = dev;
 	sdev->maxwell_core = core;
 	memcpy(&sdev->mx_wlan_client, mx_wlan_client, sizeof(struct scsc_service_client));
@@ -317,15 +319,17 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 	slsi_log_clients_init(sdev);
 	slsi_traffic_mon_clients_init(sdev);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0))
-	slsi_wake_lock_init(NULL,&sdev->wlan_wl.ws, "wlan");
-	slsi_wake_lock_init(NULL,&sdev->wlan_wl_mlme.ws, "wlan_mlme");
-	slsi_wake_lock_init(NULL,&sdev->wlan_wl_ma.ws, "wlan_ma");
-	slsi_wake_lock_init(NULL,&sdev->wlan_wl_roam.ws, "wlan_roam");
+	slsi_wake_lock_init(NULL, &sdev->wlan_wl.ws, "wlan");
+	slsi_wake_lock_init(NULL, &sdev->wlan_wl_mlme.ws, "wlan_mlme");
+	slsi_wake_lock_init(NULL, &sdev->wlan_wl_ma.ws, "wlan_ma");
+	slsi_wake_lock_init(NULL, &sdev->wlan_wl_roam.ws, "wlan_roam");
+	slsi_wake_lock_init(NULL, &sdev->wlan_wl_init.ws, "wlan_init");
 #else
 	slsi_wake_lock_init(&sdev->wlan_wl, WAKE_LOCK_SUSPEND, "wlan");
 	slsi_wake_lock_init(&sdev->wlan_wl_mlme, WAKE_LOCK_SUSPEND, "wlan_mlme");
 	slsi_wake_lock_init(&sdev->wlan_wl_ma, WAKE_LOCK_SUSPEND, "wlan_ma");
 	slsi_wake_lock_init(&sdev->wlan_wl_roam, WAKE_LOCK_SUSPEND, "wlan_roam");
+	slsi_wake_lock_init(&sdev->wlan_wl_init, WAKE_LOCK_SUSPEND, "wlan_init");
 #endif
 
 	sdev->recovery_next_state = 0;
@@ -369,7 +373,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 		goto err_udi_proc_init;
 	}
 
-#ifndef CONFIG_SCSC_WLAN_BLOCK_IPV6
+#if IS_ENABLED(CONFIG_IPV6)
 	sdev->inet6addr_notifier.notifier_call = slsi_dev_inet6addr_changed;
 	if (register_inet6addr_notifier(&sdev->inet6addr_notifier) != 0) {
 		SLSI_ERR(sdev, "failed to register inet6addr_notifier\n");
@@ -380,7 +384,7 @@ struct slsi_dev *slsi_dev_attach(struct device *dev, struct scsc_mx *core, struc
 	sdev->inetaddr_notifier.notifier_call = slsi_dev_inetaddr_changed;
 	if (register_inetaddr_notifier(&sdev->inetaddr_notifier) != 0) {
 		SLSI_ERR(sdev, "failed to register inetaddr_notifier\n");
-#ifndef CONFIG_SCSC_WLAN_BLOCK_IPV6
+#if IS_ENABLED(CONFIG_IPV6)
 		unregister_inet6addr_notifier(&sdev->inet6addr_notifier);
 #endif
 		goto err_cfg80211_registered;
@@ -483,7 +487,7 @@ err_wlan_registered:
 
 err_inetaddr_registered:
 	unregister_inetaddr_notifier(&sdev->inetaddr_notifier);
-#ifndef CONFIG_SCSC_WLAN_BLOCK_IPV6
+#if IS_ENABLED(CONFIG_IPV6)
 	unregister_inet6addr_notifier(&sdev->inet6addr_notifier);
 #endif
 
@@ -507,6 +511,7 @@ err_if:
 	slsi_wake_lock_destroy(&sdev->wlan_wl_mlme);
 	slsi_wake_lock_destroy(&sdev->wlan_wl_ma);
 	slsi_wake_lock_destroy(&sdev->wlan_wl_roam);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_init);
 
 	slsi_cfg80211_free(sdev);
 	return NULL;
@@ -529,7 +534,7 @@ void slsi_dev_detach(struct slsi_dev *sdev)
 	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Unregister inetaddr_notifier\n");
 	unregister_inetaddr_notifier(&sdev->inetaddr_notifier);
 
-#ifndef CONFIG_SCSC_WLAN_BLOCK_IPV6
+#if IS_ENABLED(CONFIG_IPV6)
 	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Unregister inet6addr_notifier\n");
 	unregister_inet6addr_notifier(&sdev->inet6addr_notifier);
 #endif
@@ -575,6 +580,7 @@ void slsi_dev_detach(struct slsi_dev *sdev)
 	slsi_wake_lock_destroy(&sdev->wlan_wl_mlme);
 	slsi_wake_lock_destroy(&sdev->wlan_wl_ma);
 	slsi_wake_lock_destroy(&sdev->wlan_wl_roam);
+	slsi_wake_lock_destroy(&sdev->wlan_wl_init);
 
 	SLSI_DBG2(sdev, SLSI_INIT_DEINIT, "Free cfg80211\n");
 	slsi_cfg80211_free(sdev);

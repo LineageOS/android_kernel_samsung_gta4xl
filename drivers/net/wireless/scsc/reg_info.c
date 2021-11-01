@@ -18,10 +18,8 @@ void slsi_regd_init(struct slsi_dev *sdev)
 	struct ieee80211_reg_rule  reg_rules[] = {
 		/* Channel 1 - 11*/
 		REG_RULE(2412 - 10, 2462 + 10, 40, 0, 20, 0),
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0))
 		/* Channel 12 - 13 NO_IR*/
 		REG_RULE(2467 - 10, 2472 + 10, 40, 0, 20, NL80211_RRF_NO_IR),
-#endif
 		/* Channel 36 - 48 */
 		REG_RULE(5180 - 10, 5240 + 10, 80, 0, 20, 0),
 		/* Channel 52 - 64 */
