@@ -16,6 +16,24 @@
       "message": "What about the broken up changes?\nWe got several people with hw rev 9 complaining about broken audio...\nWould be nice if we could get this in soon.",
       "revId": "f1aacff2000c4c76a40e3121437e8a54c1657a93",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "dc497381_e99bb44c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2021-11-11T20:21:01Z",
+      "side": 1,
+      "message": "Sorry, thought I uploaded it last week - https://review.lineageos.org/q/topic:P610XXU2DUJ1\n\nNote: I\u0027ve been waiting for Samsung to respond to my OSRC request for P615 before porting any DTS/config changes to the non-shipping non-wifi.",
+      "parentUuid": "461793d6_5abce0ae",
+      "revId": "f1aacff2000c4c76a40e3121437e8a54c1657a93",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
