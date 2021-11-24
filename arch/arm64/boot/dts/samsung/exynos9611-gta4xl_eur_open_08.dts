@@ -2,8 +2,8 @@
 
 / {
 	compatible = "samsung,GTA4XL EUR OPEN 04A", "samsung,EXYNOS9611";
-	dtbo-hw_rev = <0x7>;
-	dtbo-hw_rev_end = <0x7>;
+	dtbo-hw_rev = <0x8>;
+	dtbo-hw_rev_end = <0x8>;
 
 	fragment@modemif {
 		target-path = [2f 00];
@@ -2798,7 +2798,8 @@
 		target = <0xffffffff>;
 
 		__overlay__ {
-			status = "disabled";
+			status = "okay";
+			parts = "vbmeta,boot,system,vendor,product,odm,prism,optics,vbmeta_samsung,recovery,dtbo,keystorage";
 		};
 	};
 
@@ -2806,7 +2807,8 @@
 		target = <0xffffffff>;
 
 		__overlay__ {
-			status = "disabled";
+			status = "okay";
+			parts = "vbmeta,boot,system,vendor,product,odm,prism,optics,vbmeta_samsung,recovery,dtbo,keystorage";
 		};
 	};
 
