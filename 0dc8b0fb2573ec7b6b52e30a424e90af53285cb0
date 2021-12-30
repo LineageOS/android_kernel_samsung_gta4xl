@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "0ad11f75_8cbdef95",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 11883
+      },
+      "writtenOn": "2021-12-30T22:42:14Z",
+      "side": 1,
+      "message": "This change enforced the hid_is_usb check in a lot of drivers where usb_interface isn\u0027t even used...",
+      "revId": "0dc8b0fb2573ec7b6b52e30a424e90af53285cb0",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
