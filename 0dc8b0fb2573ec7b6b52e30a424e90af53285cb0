@@ -16,6 +16,24 @@
       "message": "This change enforced the hid_is_usb check in a lot of drivers where usb_interface isn\u0027t even used...",
       "revId": "0dc8b0fb2573ec7b6b52e30a424e90af53285cb0",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "1b4bd20d_e8c5cb91",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2021-12-30T23:07:21Z",
+      "side": 1,
+      "message": "Yes, it did, but I\u0027ll wait for stable to work that side of things out. My goal here was to fix an identified regression by touching as little as possible",
+      "parentUuid": "0ad11f75_8cbdef95",
+      "revId": "0dc8b0fb2573ec7b6b52e30a424e90af53285cb0",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
