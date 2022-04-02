@@ -615,7 +615,7 @@ static ssize_t mtp_read(struct file *fp, char __user *buf,
 		return -EINVAL;
 	}
 
-	DBG(cdev, "%s(%zu) state:%d\n", __func__, count, dev->state);
+	DBG(cdev, "mtp_read(%zu)\n", count);
 
 	/* we will block until we're online */
 	DBG(cdev, "mtp_read: waiting for online state\n");
@@ -739,7 +739,7 @@ static ssize_t mtp_write(struct file *fp, const char __user *buf,
 		return -EINVAL;
 	}
 
-	DBG(cdev, "%s(%zu) state:%d\n", __func__, count, dev->state);
+	DBG(cdev, "mtp_write(%zu)\n", count);
 
 	spin_lock_irq(&dev->lock);
 	if (dev->state == STATE_CANCELED) {
