@@ -816,6 +816,14 @@ config MMAP_READAROUND_LIMIT
 	  during the sluggish situation. Add the hard upper-limit for
 	  mmap readaround.
 
+config SWAP_ENABLE_READAHEAD
+	bool "Enable readahead on page swap in"
+	depends on SWAP
+	default y
+	help
+	  When a page fault occurs, adjacent pages are also paged in
+          expecting those pages will be used in near future.
+
 config KANOND
 	bool "Support kanond"
 	default n
