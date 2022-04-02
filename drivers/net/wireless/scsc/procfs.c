@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -434,11 +434,6 @@ static int slsi_procfs_build_show(struct seq_file *m, void *v)
 	seq_puts(m, "CONFIG_SCSC_WLAN_DYNAMIC_ITO                      : y\n");
 #else
 	seq_puts(m, "CONFIG_SCSC_WLAN_DYNAMIC_ITO                      : n\n");
-#endif
-#ifdef CONFIG_SCSC_WLAN_FAST_RECOVERY
-	seq_puts(m, "CONFIG_SCSC_WLAN_FAST_RECOVERY                      : y\n");
-#else
-	seq_puts(m, "CONFIG_SCSC_WLAN_FAST_RECOVERY                      : n\n");
 #endif
 #ifdef CONFIG_SCSC_WLAN_AP_AUTO_RECOVERY
 	seq_puts(m, "CONFIG_SCSC_WLAN_AP_AUTO_RECOVERY                 : y\n");

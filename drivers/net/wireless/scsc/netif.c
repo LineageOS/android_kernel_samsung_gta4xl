@@ -1,6 +1,6 @@
 /*
  *
- * Copyright (c) 2012 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -55,6 +55,8 @@
 /* (RFC3662) */
 #define CS1		0x08
 
+#define SLSI_TX_TIMEOUT    (5 * HZ)
+
 #ifdef CONFIG_SCSC_WLAN_RX_NAPI
 #ifdef CONFIG_SOC_EXYNOS9630
 static uint napi_cpu_big_tput_in_mbps = 400;
@@ -73,6 +75,11 @@ static uint rps_enable_tput_in_mbps = 100;
 #endif
 module_param(rps_enable_tput_in_mbps, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(rps_enable_tput_in_mbps, "throughput (in Mbps) to enable RPS");
+#endif
+#ifdef CONFIG_SCSC_WLAN_RX_NAPI_GRO
+static unsigned long gro_flush_timeout = 4000;
+module_param(gro_flush_timeout, ulong, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(gro_flush_timeout, "GRO timeout (in ns)");
 #endif
 #ifndef CONFIG_ARM
 static bool tcp_ack_suppression_disable;
@@ -191,6 +198,30 @@ void slsi_net_randomize_nmi_ndi(struct slsi_dev *sdev)
 }
 #endif
 
+static void slsi_mac_address_init(struct slsi_dev *sdev)
+{
+	SLSI_DBG1(sdev, SLSI_NETDEV, "\n");
+	slsi_get_hw_mac_address(sdev, sdev->hw_addr);
+	SLSI_DBG1(sdev, SLSI_NETDEV, "Hardware MAC address = %pM\n", sdev->hw_addr);
+	/* Assign Addresses */
+	SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_WLAN], sdev->hw_addr);
+
+	SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_P2P],  sdev->hw_addr);
+	/* Set the local bit */
+	sdev->netdev_addresses[SLSI_NET_INDEX_P2P][0] |= 0x02;
+
+	SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN], sdev->hw_addr);
+	/* Set the local bit */
+	sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN][0] |= 0x02;
+	/* EXOR 5th byte with 0x80 */
+	sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN][4] ^= 0x80;
+
+#if CONFIG_SCSC_WLAN_MAX_INTERFACES >= 4 && defined(CONFIG_SCSC_WIFI_NAN_ENABLE)
+	if (slsi_get_nan_mac_random())
+		 slsi_net_randomize_nmi_ndi(sdev);
+#endif
+}
+
 static inline bool slsi_netif_is_udp_pkt(struct sk_buff *skb)
 {
 	if (ip_hdr(skb)->version == 4)
@@ -270,13 +301,29 @@ static int slsi_net_open(struct net_device *dev)
 	struct net_device *nan_dev;
 	struct netdev_vif *nan_ndev_vif;
 #endif
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+	u8 mhs_or_dual_sta_mac[ETH_ALEN];
+#endif
+	int r = 0;
 
 	if (WARN_ON(ndev_vif->is_available))
 		return -EINVAL;
 
 	if (sdev->mlme_blocked) {
 		SLSI_NET_WARN(dev, "Fail: called when MLME in blocked state\n");
+		slsi_dump_system_error_buffer(sdev);
 		return -EIO;
+	}
+
+	if (sdev->recovery_fail_safe) {
+		r = wait_for_completion_timeout(&sdev->recovery_fail_safe_complete,
+						msecs_to_jiffies(SLSI_SYS_ERROR_RECOVERY_TIMEOUT));
+
+		if (r == 0) {
+			SLSI_INFO(sdev, "Fail: system error recovery still in progress\n");
+			slsi_dump_system_error_buffer(sdev);
+		}
+		reinit_completion(&sdev->recovery_fail_safe_complete);
 	}
 
 	slsi_wake_lock(&sdev->wlan_wl_init);
@@ -308,22 +355,7 @@ static int slsi_net_open(struct net_device *dev)
 	}
 
 	if (!sdev->netdev_up_count) {
-		slsi_get_hw_mac_address(sdev, sdev->hw_addr);
-		/* Assign Addresses */
-		SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_WLAN], sdev->hw_addr);
-
-		SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_P2P],  sdev->hw_addr);
-		/* Set the local bit */
-		sdev->netdev_addresses[SLSI_NET_INDEX_P2P][0] |= 0x02;
-
-		SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN], sdev->hw_addr);
-		/* Set the local bit */
-		sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN][0] |= 0x02;
-		/* EXOR 5th byte with 0x80 */
-		sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN][4] ^= 0x80;
-#if CONFIG_SCSC_WLAN_MAX_INTERFACES >= 4 && defined(CONFIG_SCSC_WIFI_NAN_ENABLE)
-		slsi_net_randomize_nmi_ndi(sdev);
-#endif
+		slsi_mac_address_init(sdev);
 		sdev->initial_scan = true;
 #ifdef CONFIG_SCSC_WIFI_NAN_ENABLE
 		nan_dev = slsi_nan_get_netdev(sdev);
@@ -334,17 +366,32 @@ static int slsi_net_open(struct net_device *dev)
 	}
 	ndev_vif->acs = false;
 	memset(dev_addr_zero_check, 0, ETH_ALEN);
-	if (!memcmp(dev->dev_addr, dev_addr_zero_check, ETH_ALEN)) {
+	if ((!memcmp(dev->dev_addr, dev_addr_zero_check, ETH_ALEN)) ||
+	    (SLSI_IS_VIF_INDEX_MHS_DUALSTA(sdev, ndev_vif) && (!memcmp(dev->dev_addr, SLSI_DEFAULT_HW_MAC_ADDR, ETH_ALEN)))) {
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
-		if (SLSI_IS_VIF_INDEX_MHS(sdev, ndev_vif))
-			SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[SLSI_NET_INDEX_P2P]);
-		else
+		if (SLSI_IS_VIF_INDEX_MHS_DUALSTA(sdev, ndev_vif)) {
+			SLSI_ETHER_COPY(mhs_or_dual_sta_mac, sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN]);
+			mhs_or_dual_sta_mac[2] ^= 0x80;
+			SLSI_ETHER_COPY(dev->dev_addr, mhs_or_dual_sta_mac);
+		} else {
 			SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[ndev_vif->ifnum]);
+		}
 #else
 		SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[ndev_vif->ifnum]);
 #endif
 	}
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+	if (!SLSI_IS_VIF_INDEX_MHS_DUALSTA(sdev, ndev_vif)) {
+		SLSI_ETHER_COPY(dev->perm_addr, sdev->netdev_addresses[ndev_vif->ifnum]);
+	} else {
+		SLSI_ETHER_COPY(mhs_or_dual_sta_mac, sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN]);
+		mhs_or_dual_sta_mac[2] ^= 0x80;
+		SLSI_ETHER_COPY(dev->perm_addr, mhs_or_dual_sta_mac);
+	}
+#else
 	SLSI_ETHER_COPY(dev->perm_addr, sdev->netdev_addresses[ndev_vif->ifnum]);
+#endif
+
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 
 	reinit_completion(&ndev_vif->sig_wait.completion);
@@ -387,6 +434,18 @@ static int slsi_net_stop(struct net_device *dev)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 	struct slsi_dev   *sdev = ndev_vif->sdev;
+	int r = 0;
+
+	if (sdev->recovery_fail_safe) {
+		r = wait_for_completion_timeout(&sdev->recovery_fail_safe_complete,
+						msecs_to_jiffies(SLSI_SYS_ERROR_RECOVERY_TIMEOUT));
+
+		if (r == 0) {
+			SLSI_INFO(sdev, "Fail: system error recovery still in progress\n");
+			slsi_dump_system_error_buffer(sdev);
+		}
+		reinit_completion(&sdev->recovery_fail_safe_complete);
+	}
 
 	SLSI_NET_INFO(dev, "ifnum:%d r:%d\n", ndev_vif->ifnum, sdev->recovery_status);
 	slsi_wake_lock(&sdev->wlan_wl);
@@ -430,6 +489,42 @@ static struct net_device_stats *slsi_net_get_stats(struct net_device *dev)
 
 	SLSI_NET_DBG4(dev, SLSI_NETDEV, "\n");
 	return &ndev_vif->stats;
+}
+
+static void slsi_netif_show_stats(struct net_device *dev)
+{
+	struct net_device_stats *stats;
+
+	stats = slsi_net_get_stats(dev);
+	if (!stats) {
+		SLSI_NET_ERR(dev, "Can't get stats of %s\n", dev->name);
+		return;
+	}
+
+	SLSI_NET_INFO(dev, "[tx]bytes %lu packets %lu err %lu drop %lu fifo %lu colls %lu carrier %lu comp %lu\n",
+			stats->tx_bytes, stats->tx_packets, stats->tx_errors, stats->tx_dropped, stats->tx_fifo_errors,
+			stats->collisions, stats->tx_carrier_errors, stats->tx_compressed);
+	SLSI_NET_INFO(dev, "[rx]bytes %lu packets %lu err %lu drop %lu fifo %lu frame %lu comp %lu mc %lu\n",
+			stats->rx_bytes, stats->rx_packets, stats->rx_errors, stats->rx_dropped, stats->tx_fifo_errors,
+			stats->rx_frame_errors, stats->rx_compressed, stats->multicast);
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
+static void slsi_net_tx_timeout(struct net_device *dev, unsigned int txqueue)
+#else
+static void slsi_net_tx_timeout(struct net_device *dev)
+#endif
+{
+	if (!net_ratelimit())
+		return;
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
+	SLSI_NET_ERR(dev, "Transmit Timed Out!!! name %s state 0x%lx txq %u\n", dev->name, dev->state, txqueue);
+#else
+	SLSI_NET_ERR(dev, "Transmit Timed Out!!! name %s state 0x%lx\n", dev->name, dev->state);
+#endif
+
+	slsi_netif_show_stats(dev);
 }
 
 #ifdef CONFIG_SCSC_USE_WMM_TOS
@@ -476,8 +571,8 @@ static u16 slsi_get_priority_from_tos_dscp(u8 *frame, u16 proto)
 #if (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 10)
 	switch (dscp) {
 	case CS7:
-		return FAPI_PRIORITY_QOS_UP7;
 	case CS6:
+		return FAPI_PRIORITY_QOS_UP7;
 	case DSCP_EF:
 	case DSCP_VA:
 		return FAPI_PRIORITY_QOS_UP6;
@@ -1216,6 +1311,7 @@ static int  slsi_set_mac_address(struct net_device *dev, void *addr)
 	SLSI_NET_DBG1(dev, SLSI_NETDEV, "%pM\n", sa->sa_data);
 	SLSI_ETHER_COPY(dev->dev_addr, sa->sa_data);
 	sdev->mac_changed = true;
+	ndev_vif->ipaddress = 0;
 
 	/* Interface is pulled down before mac address is changed.
 	 * First scan initiated after interface is brought up again, should be treated as initial scan, for faster reconnection.
@@ -1230,6 +1326,7 @@ static const struct net_device_ops slsi_netdev_ops = {
 	.ndo_stop         = slsi_net_stop,
 	.ndo_start_xmit   = slsi_net_hw_xmit,
 	.ndo_do_ioctl     = slsi_net_ioctl,
+	.ndo_tx_timeout   = slsi_net_tx_timeout,
 	.ndo_get_stats    = slsi_net_get_stats,
 	.ndo_select_queue = slsi_net_select_queue,
 	.ndo_fix_features = slsi_net_fix_features,
@@ -1245,6 +1342,10 @@ static void slsi_if_setup(struct net_device *dev)
 	dev->needs_free_netdev = true;
 #else
 	dev->destructor = free_netdev;
+#endif
+	dev->watchdog_timeo = SLSI_TX_TIMEOUT;
+#ifdef CONFIG_SCSC_WLAN_RX_NAPI_GRO
+	dev->gro_flush_timeout = gro_flush_timeout;
 #endif
 }
 
@@ -1686,7 +1787,7 @@ int slsi_netif_add_locked(struct slsi_dev *sdev, const char *name, int ifnum)
 
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 	if (strcmp(name, CONFIG_SCSC_AP_INTERFACE_NAME) == 0)
-		SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[SLSI_NET_INDEX_P2P]);
+		SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN]);
 	else
 		SLSI_ETHER_COPY(dev->dev_addr, sdev->netdev_addresses[ifnum]);
 #else
@@ -1777,6 +1878,7 @@ int slsi_netif_init(struct slsi_dev *sdev)
 	}
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 #if defined(CONFIG_SCSC_WLAN_MHS_STATIC_INTERFACE) || (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 9) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
+	SLSI_ETHER_COPY(sdev->netdev_addresses[SLSI_NET_INDEX_P2PX_SWLAN], SLSI_DEFAULT_HW_MAC_ADDR);
 	if (slsi_netif_add_locked(sdev, CONFIG_SCSC_AP_INTERFACE_NAME, SLSI_NET_INDEX_P2PX_SWLAN) != 0) {
 		rtnl_lock();
 		slsi_netif_remove_locked(sdev, sdev->netdev[SLSI_NET_INDEX_WLAN]);

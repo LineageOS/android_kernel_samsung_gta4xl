@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2014 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2014 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -735,7 +735,10 @@ static int slsi_nan_enable_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_
 		case NAN_REQ_ATTR_DISC_MAC_ADDR_RANDOM_INTERVAL:
 			if (slsi_util_nla_get_u32(iter, &random_interval))
 				return -EINVAL;
-			hal_req->disc_mac_addr_rand_interval_sec = random_interval;
+			if (slsi_get_nan_mac_random())
+				hal_req->disc_mac_addr_rand_interval_sec = random_interval;
+			else
+				hal_req->disc_mac_addr_rand_interval_sec = 0;
 #ifdef SCSC_SEP_VERSION
 			random_interval = random_interval & SLSI_NAN_CLUSTER_MERGE_ENABLE_MASK;
 			if (random_interval == SLSI_NAN_CLUSTER_MERGE_ENABLE_MASK) {
@@ -806,8 +809,8 @@ int slsi_nan_enable(struct wiphy *wiphy, struct wireless_dev *wdev, const void *
 		goto exit_with_mutex;
 	}
 	ndev_vif->vif_type = FAPI_VIFTYPE_NAN;
-
-	slsi_net_randomize_nmi_ndi(sdev);
+	if (slsi_get_nan_mac_random())
+		slsi_net_randomize_nmi_ndi(sdev);
 
 	if (hal_req.config_intf_addr)
 		ether_addr_copy(nan_vif_mac_address, hal_req.intf_addr_val);
@@ -1939,7 +1942,10 @@ static int slsi_nan_config_get_nl_params(struct slsi_dev *sdev, struct slsi_hal_
 		case NAN_REQ_ATTR_DISC_MAC_ADDR_RANDOM_INTERVAL:
 			if (slsi_util_nla_get_u32(iter, &random_interval))
 				return -EINVAL;
-			hal_req->disc_mac_addr_rand_interval_sec = random_interval;
+			if (slsi_get_nan_mac_random())
+				hal_req->disc_mac_addr_rand_interval_sec = random_interval;
+			else
+				hal_req->disc_mac_addr_rand_interval_sec = 0;
 #ifdef SCSC_SEP_VERSION
 			random_interval = random_interval & SLSI_NAN_CLUSTER_MERGE_ENABLE_MASK;
 			if (random_interval == SLSI_NAN_CLUSTER_MERGE_ENABLE_MASK) {
@@ -3524,12 +3530,15 @@ void slsi_nan_ndp_termination_handler(struct slsi_dev *sdev, struct net_device *
 void slsi_nan_ndp_termination_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb)
 {
 	u16 ndp_instance_id;
+	u16 reason;
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
 
-	SLSI_DBG3(sdev, SLSI_GSCAN, "\n");
 	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
 
 	ndp_instance_id = fapi_get_u16(skb, u.mlme_ndp_terminated_ind.ndp_instance_id);
+	reason = fapi_get_u16(skb, u.mlme_ndp_terminated_ind.spare_1);
+
+	SLSI_INFO(sdev, "ndp_id:%d, reason:%d\n", ndp_instance_id, reason);
 
 	if (ndp_instance_id <= SLSI_NAN_MAX_NDP_INSTANCES)
 		slsi_nan_ndp_termination_handler(sdev, dev, ndp_instance_id, ndev_vif->nan.ndp_ndi[ndp_instance_id - 1]);
@@ -3621,7 +3630,7 @@ static void slsi_nan_trigger_rtt_complete_event(struct slsi_dev *sdev, u16 reque
 void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb)
 {
 	struct netdev_vif *ndev_vif = netdev_priv(dev);
-	u32 i, tm;
+	u32 tm;
 	int data_len = fapi_get_datalen(skb);
 	u32 tmac = fapi_get_u32(skb, u.mlme_nan_range_ind.spare_3);
 	u8 *ip_ptr;
@@ -3675,7 +3684,7 @@ void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 			goto exit;
 		}
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		ip_ptr += 2;
 
 		if (value != SLSI_NAN_TLV_NAN_RTT_RESULT) {
@@ -3685,7 +3694,7 @@ void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 			goto exit;
 		}
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		ip_ptr += 2;
 
 		if (value != SLSI_NAN_TLV_NAN_RTT_RESULT_LEN) {
@@ -3698,7 +3707,7 @@ void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 		res |= nla_put(nl_skb, SLSI_RTT_EVENT_ATTR_ADDR, ETH_ALEN, ip_ptr);
 		ip_ptr += 6;
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_STATUS, value);
 		ip_ptr += 2;
 
@@ -3710,23 +3719,23 @@ void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_RETRY_AFTER_DURATION, 0);
 		res |= nla_put_u8(nl_skb, SLSI_RTT_EVENT_ATTR_TYPE, 2);
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_RSSI, value);
 		ip_ptr += 2;
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_RSSI_SPREAD, value);
 		ip_ptr += 2;
 
-		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr[i]);
+		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr);
 		res |= nla_put_u32(nl_skb, SLSI_RTT_EVENT_ATTR_RTT, temp_value);
 		ip_ptr += 4;
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_RTT_SD, value);
 		ip_ptr += 2;
 
-		value = le16_to_cpu(*(__le16 *)&ip_ptr[i]);
+		value = le16_to_cpu(*(__le16 *)&ip_ptr);
 		res |= nla_put_u16(nl_skb, SLSI_RTT_EVENT_ATTR_RTT_SPREAD, value);
 		ip_ptr += 2;
 
@@ -3736,16 +3745,16 @@ void slsi_rx_nan_range_ind(struct slsi_dev *sdev, struct net_device *dev, struct
 		get_monotonic_boottime(&ts);
 #endif
 		tkernel = (u64)TIMESPEC_TO_US(ts);
-		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr[i]);
+		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr);
 		tm = temp_value;
 		res |= nla_put_u32(nl_skb, SLSI_RTT_EVENT_ATTR_TIMESTAMP_US, tkernel - (tmac - tm));
 		ip_ptr += 4;
 
-		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr[i]);
+		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr);
 		res |= nla_put_u32(nl_skb, SLSI_RTT_EVENT_ATTR_DISTANCE_MM, temp_value);
 		ip_ptr += 4;
 
-		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr[i]);
+		temp_value = le32_to_cpu(*(__le32 *)&ip_ptr);
 		res |= nla_put_u32(nl_skb, SLSI_RTT_EVENT_ATTR_DISTANCE_SD_MM, temp_value);
 		ip_ptr += 4;
 

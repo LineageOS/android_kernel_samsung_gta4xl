@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 #include <linux/etherdevice.h>
@@ -291,6 +291,7 @@ static int slsi_extract_mbssids(struct slsi_dev *sdev, struct netdev_vif *ndev_v
 	int current_rssi;
 	u16 current_freq;
 	size_t mgmt_len;
+	int count = 0;
 
 	mgmt_len = fapi_get_mgmtlen(skb);
 	current_rssi =  fapi_get_s16(skb, u.mlme_scan_ind.rssi);
@@ -323,6 +324,11 @@ static int slsi_extract_mbssids(struct slsi_dev *sdev, struct netdev_vif *ndev_v
 			const u8 *ssid_ie;
 			int ssid_len = 0;
 
+			count++;
+			if (count > 127) {
+				SLSI_INFO_NODEV("Infinite Loop\n");
+				break;
+			}
 			if (sub_elem[0] != 0 || sub_elem[1] < 4) {
 				/* not a valid BSS profile */
 				continue;
@@ -423,8 +429,16 @@ static int slsi_populate_ssid_info(struct slsi_dev *sdev, struct netdev_vif *nde
 	struct ieee80211_mgmt *mgmt = NULL;
 	struct slsi_scan_result *scan_result = ndev_vif->scan[scan_id].scan_results;
 	struct slsi_ssid_info *ssid_info;
+	int max_count, scanresultcount = 0;
+
+	max_count  = slsi_dev_get_scan_result_count();
 
 	while (scan_result) {
+		scanresultcount++;
+		if (scanresultcount >= max_count) {
+			SLSI_ERR_NODEV("Scan Result More than Max Scan Result Count!!\n");
+			break;
+		}
 		if (scan_result->beacon) {
 			beacon_probe_skb = scan_result->beacon;
 		} else if (scan_result->probe_resp) {
@@ -766,7 +780,7 @@ void slsi_rx_beacon_reporting_event_ind(struct slsi_dev *sdev, struct net_device
 	else
 		SLSI_ERR(sdev, "received abort_event unsupporting reason(%u)\n", reason_code);
 
-	ret = slsi_send_forward_beacon_abort_vendor_event(sdev, reason_code);
+	ret = slsi_send_forward_beacon_abort_vendor_event(sdev, dev, reason_code);
 	if (ret)
 		SLSI_ERR(sdev, "Failed to send forward_beacon_abort_event(err=%d)\n", ret);
 	kfree_skb(skb);
@@ -806,9 +820,8 @@ void slsi_handle_wips_beacon(struct slsi_dev *sdev, struct net_device *dev, stru
 		      fapi_get_mgmt(skb)->bssid, beacon_int, timestamp,
 		      (u64)TIMESPEC_TO_US(sys_time));
 
-	ret = slsi_send_forward_beacon_vendor_event(sdev, scan_ssid, ssid_len, scan_bssid,
-						    channel, beacon_int, timestamp,
-						    (u64)TIMESPEC_TO_US(sys_time));
+	ret = slsi_send_forward_beacon_vendor_event(sdev, dev, scan_ssid, ssid_len, scan_bssid,
+						    channel, beacon_int, timestamp,  (u64)TIMESPEC_TO_US(sys_time));
 	if (ret)
 		SLSI_ERR(sdev, "Failed to forward beacon_event\n");
 }
@@ -2061,7 +2074,7 @@ void slsi_rx_roamed_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk
 						assoc_rsp_ie, assoc_rsp_ie_len,
 						ndev_vif->sta.sta_bss->ies->data, ndev_vif->sta.sta_bss->ies->len,
 						!temporal_keys_required) != 0) {
-			SLSI_NET_ERR(dev, "Could not send Roam vendor event up");
+			SLSI_NET_ERR(dev, "Couldnt send Roam vendor event");
 		}
 #endif
 		SLSI_NET_DBG3(dev, SLSI_MLME, "cfg80211_roamed() Done\n");
@@ -2740,95 +2753,6 @@ void slsi_connect_result_code(struct netdev_vif *ndev_vif, u16 fw_result_code, i
 	}
 }
 
-#if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
-int slsi_retry_connection(struct slsi_dev *sdev, struct net_device *dev)
-{
-	/* retry success return 1 else return 0 */
-	struct netdev_vif *ndev_vif = netdev_priv(dev);
-	struct slsi_peer *peer;
-	int r = 0;
-	bool ap_found = false;
-	u8 device_address[ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-	const u8 slsi_extended_cap_mask[] = { 0xFF, 0xFF, 0xFF, 0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-	u8 *probe_req_ies;
-	size_t probe_req_ie_len;
-
-	ap_found = slsi_select_ap_for_connection(sdev, dev, NULL, NULL, true);
-	if (!ap_found) {
-		SLSI_NET_ERR(dev, "Could not find BSSID for reconnection\n");
-		return 0;
-	}
-	probe_req_ie_len = ndev_vif->probe_req_ie_len;
-	probe_req_ies = kmalloc(probe_req_ie_len, GFP_KERNEL);
-	if (probe_req_ies && probe_req_ie_len)
-		memcpy(probe_req_ies, ndev_vif->probe_req_ies, ndev_vif->probe_req_ie_len);
-	if (slsi_mlme_del_vif(sdev, dev) != 0) {
-		SLSI_NET_ERR(dev, "slsi_mlme_del_vif failed\n");
-		return 0;
-	}
-	if (slsi_mlme_add_vif(sdev, dev, dev->dev_addr, device_address) != 0) {
-		SLSI_NET_ERR(dev, "slsi_mlme_add_vif failed\n");
-		return 0;
-	}
-	if (slsi_mlme_register_action_frame(sdev, dev, ndev_vif->sta.action_frame_bmap,
-					    ndev_vif->sta.action_frame_suspend_bmap) != 0) {
-		SLSI_NET_ERR(dev, "Action frame registration failed for bitmap value 0x%x 0x%x\n",
-			     ndev_vif->sta.action_frame_bmap, ndev_vif->sta.action_frame_bmap);
-		return 0;
-	}
-
-	r = slsi_set_boost(sdev, dev);
-	if (r != 0)
-		SLSI_NET_ERR(dev, "Rssi Boost set failed: %d\n", r);
-	if (probe_req_ies && probe_req_ie_len) {
-		(void)slsi_mlme_add_info_elements(sdev, dev, FAPI_PURPOSE_PROBE_REQUEST, probe_req_ies,
-						  probe_req_ie_len);
-	}
-	r = slsi_set_ext_cap(sdev, dev, ndev_vif->sta.sme.ie, ndev_vif->sta.sme.ie_len, slsi_extended_cap_mask);
-	if (r != 0)
-		SLSI_NET_ERR(dev, "Failed to set extended capability MIB: %d\n", r);
-	r = slsi_mlme_connect(sdev, dev, &ndev_vif->sta.sme, ndev_vif->sta.sme.channel, ndev_vif->sta.sme.bssid);
-	if (r != 0) {
-		SLSI_NET_ERR(dev, "Reconnect failed: %d\n", r);
-		return 0;
-	}
-	peer = slsi_get_peer_from_qs(sdev, dev, SLSI_STA_PEER_QUEUESET);
-	if (!peer) {
-		SLSI_NET_ERR(dev, "peer not found!\n");
-		return 0;
-	}
-	SLSI_ETHER_COPY(peer->address, ndev_vif->sta.sme.bssid);
-
-	return 1;
-}
-
-void slsi_free_connection_params(struct slsi_dev *sdev, struct net_device *dev)
-{
-	struct netdev_vif *ndev_vif = netdev_priv(dev);
-
-	if (ndev_vif->sta.sme.ssid) {
-		kfree(ndev_vif->sta.sme.ssid);
-		ndev_vif->sta.sme.ssid = NULL;
-	}
-	if (ndev_vif->sta.connected_bssid) {
-		kfree(ndev_vif->sta.connected_bssid);
-		ndev_vif->sta.connected_bssid = NULL;
-	}
-	if (ndev_vif->sta.sme.key) {
-		kfree(ndev_vif->sta.sme.key);
-		ndev_vif->sta.sme.key = NULL;
-	}
-	if (ndev_vif->sta.sme.ssid) {
-		kfree(ndev_vif->sta.sme.ssid);
-		ndev_vif->sta.sme.ssid = NULL;
-	}
-	if (ndev_vif->sta.sme.ie) {
-		kfree(ndev_vif->sta.sme.ie);
-		ndev_vif->sta.sme.ie = NULL;
-	}
-}
-#endif
-
 void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb)
 {
 	struct netdev_vif           *ndev_vif = netdev_priv(dev);
@@ -2840,6 +2764,7 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 	int                         assoc_rsp_ie_len = 0;
 	u8                          bssid[ETH_ALEN];
 	u16                         fw_result_code;
+	struct ieee80211_channel    *cur_channel = NULL;
 	enum nl80211_timeout_reason timeout_reason = NL80211_TIMEOUT_UNSPECIFIED;
 
 	cancel_work_sync(&ndev_vif->set_multicast_filter_work);
@@ -2860,7 +2785,7 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 		goto exit_with_lock;
 
 	if (ndev_vif->sta.vif_status != SLSI_VIF_STATUS_CONNECTING) {
-		SLSI_NET_DBG1(dev, SLSI_MLME, "VIF not connecting\n");
+		SLSI_NET_DBG1(dev, SLSI_MLME, "VIF not in connecting state\n");
 		goto exit_with_lock;
 	}
 
@@ -2899,6 +2824,7 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 #endif
 			goto exit_with_lock;
 		} else {
+			ndev_vif->sta.drv_connect_req_ongoing = false;
 			slsi_free_connection_params(sdev, dev);
 		}
 #endif
@@ -2941,7 +2867,7 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 		/* Trigger log collection if fw result code is not success */
 		scsc_log_collector_schedule_collection(SCSC_LOG_HOST_WLAN, SCSC_LOG_HOST_WLAN_REASON_CONNECT_ERR);
 #endif
-#if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
+#if (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
 #ifdef CONFIG_SCSC_WLAN_SAE_CONFIG
 		if (ndev_vif->sta.crypto.wpa_versions == 3) {
 			if (fw_result_code == FAPI_RESULTCODE_AUTH_TIMEOUT ||
@@ -2964,10 +2890,7 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 #endif
 	} else {
 		SLSI_INFO(sdev, "Received Association Response\n");
-#if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
-		slsi_free_connection_params(sdev, dev);
-		slsi_set_reset_connect_attempted_flag(sdev, dev, NULL);
-#endif
+
 		if (!peer || !peer->assoc_ie) {
 			if (peer)
 				WARN(!peer->assoc_ie, "proc-started-ind not received before connect-ind");
@@ -3019,18 +2942,18 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 #endif
 			SLSI_NET_DBG1(dev, SLSI_MLME, "Sending scan indication to cfg80211, bssid: %pM\n", fapi_get_mgmt(ndev_vif->sta.mlme_scan_ind_skb)->bssid);
 			/* saved skb [mlme_scan_ind] freed inside slsi_rx_scan_pass_to_cfg80211 */
-			slsi_rx_scan_pass_to_cfg80211(sdev, dev, ndev_vif->sta.mlme_scan_ind_skb);
+			cur_channel = slsi_rx_scan_pass_to_cfg80211(sdev, dev, ndev_vif->sta.mlme_scan_ind_skb);
 			ndev_vif->sta.mlme_scan_ind_skb = NULL;
 		}
 
 		if (!ndev_vif->sta.sta_bss) {
 			if (peer)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
-				ndev_vif->sta.sta_bss = cfg80211_get_bss(sdev->wiphy, ndev_vif->chan, peer->address,
+				ndev_vif->sta.sta_bss = cfg80211_get_bss(sdev->wiphy, cur_channel, peer->address,
 									 NULL, 0,  IEEE80211_BSS_TYPE_ANY,
 									 IEEE80211_PRIVACY_ANY);
 #else
-				ndev_vif->sta.sta_bss = cfg80211_get_bss(sdev->wiphy, ndev_vif->chan, peer->address,
+				ndev_vif->sta.sta_bss = cfg80211_get_bss(sdev->wiphy, cur_channel, peer->address,
 									 NULL, 0,  0, 0);
 #endif
 			if (!ndev_vif->sta.sta_bss) {
@@ -3049,9 +2972,45 @@ void slsi_rx_connect_ind(struct slsi_dev *sdev, struct net_device *dev, struct s
 		cfg80211_connect_timeout(dev, bssid, assoc_ie, assoc_ie_len,
 					 GFP_KERNEL, timeout_reason);
 	} else {
-		cfg80211_ref_bss(sdev->wiphy, ndev_vif->sta.sta_bss);
-		cfg80211_connect_bss(dev, bssid, ndev_vif->sta.sta_bss, assoc_ie, assoc_ie_len, assoc_rsp_ie,
-				     assoc_rsp_ie_len, status, GFP_KERNEL, timeout_reason);
+		if (!ndev_vif->sta.roam_on_disconnect || status != WLAN_STATUS_SUCCESS) {
+			cfg80211_ref_bss(sdev->wiphy, ndev_vif->sta.sta_bss);
+			cfg80211_connect_bss(dev, bssid, ndev_vif->sta.sta_bss, assoc_ie, assoc_ie_len, assoc_rsp_ie,
+					     assoc_rsp_ie_len, status, GFP_KERNEL, timeout_reason);
+		} else {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
+			struct cfg80211_roam_info roam_info = {};
+
+			/* cfg80211 does not require bss pointer in roam_info.
+			 * If bss pointer is given in roam_info, cfg80211 bss
+			 * data base goes bad and results in random panic.
+			 */
+			roam_info.channel = ndev_vif->sta.sta_bss->channel;
+			roam_info.bssid = ndev_vif->sta.sta_bss->bssid;
+			roam_info.req_ie = assoc_ie;
+			roam_info.req_ie_len = assoc_ie_len;
+			roam_info.resp_ie = assoc_rsp_ie;
+			roam_info.resp_ie_len = assoc_rsp_ie_len;
+			cfg80211_roamed(dev, &roam_info, GFP_KERNEL);
+#else
+			cfg80211_roamed(dev,
+					ndev_vif->sta.sta_bss->channel,
+					ndev_vif->sta.sta_bss->bssid,
+					assoc_ie,
+					assoc_ie_len,
+					assoc_rsp_ie,
+					assoc_rsp_ie_len,
+					GFP_KERNEL);
+#endif
+#ifdef CONFIG_SCSC_WLAN_KEY_MGMT_OFFLOAD
+			if (slsi_send_roam_vendor_event(sdev, peer->address, assoc_ie, assoc_ie_len,
+							assoc_rsp_ie, assoc_rsp_ie_len,
+							ndev_vif->sta.sta_bss->ies->data, ndev_vif->sta.sta_bss->ies->len,
+							false) != 0) {
+				SLSI_NET_ERR(dev, "Couldnt send Roam event");
+			}
+#endif
+			ndev_vif->sta.roam_on_disconnect = false;
+		}
 	}
 #else
 	cfg80211_ref_bss(sdev->wiphy, ndev_vif->sta.sta_bss);
@@ -3709,6 +3668,9 @@ bool slsi_rx_received_frame_logging(struct net_device *dev, struct sk_buff *skb,
 			break;
 		case SLSI_DHCP_MESSAGE_TYPE_FORCERENEW:
 			snprintf(log_str_buffer, buffer_size, "DHCP [FORCERENEW]");
+			break;
+		case SLSI_DHCP_MESSAGE_TYPE_INVALID:
+			SLSI_DBG1_NODEV(SLSI_RX, "Received IP pkt but not DHCP\n");
 			break;
 		default:
 			snprintf(log_str_buffer, buffer_size, "DHCP [INVALID]");

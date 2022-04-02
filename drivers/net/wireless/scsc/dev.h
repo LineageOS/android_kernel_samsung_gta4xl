@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2022 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -88,6 +88,39 @@
 #define SLSI_HOSTSTATE_LOW_LATENCY_ACTIVE 0x0080
 #define SLSI_HOST_TAG_ARP_MASK            BIT(15)
 #define SLSI_ARP_UNPAUSE_THRESHOLD        4
+
+#define HEAD_SAR_BACKOFF_DISABLED           -1
+#define HEAD_SAR_BACKOFF_ENABLED            0
+#define BODY_SAR_BACKOFF_DISABLED           1
+#define BODY_SAR_BACKOFF_ENABLED            2
+#define NR_MMWAVE_SAR_BACKOFF_DISABLED      3
+#define NR_MMWAVE_SAR_BACKOFF_ENABLED       4
+#define NR_SUB6_SAR_BACKOFF_DISABLED        5
+#define NR_SUB6_SAR_BACKOFF_ENABLED         6
+#define SAR_BACKOFF_DISABLE_ALL             7
+#define MHS_SAR_BACKOFF_DISABLED            8
+#define MHS_SAR_BACKOFF_ENABLED             9
+
+#define SUB6_SAR_1_BAND                     7
+#define SUB6_SAR_2_BAND                     38
+#define SUB6_SAR_3_BAND                     40
+#define SUB6_SAR_4_BAND                     41
+#define SUB6_SAR_5_BAND                     77
+#define SUB6_SAR_6_BAND                     78
+
+#define SLSI_HOSTSTATE_MHS_SAR_ACTIVE       0x0010
+#define SLSI_HOSTSTATE_HEAD_SAR_ACTIVE      0x0020
+#define SLSI_HOSTSTATE_GRIP_SAR_ACTIVE      0x0040
+#define SLSI_HOSTSTATE_LOW_LATENCY_ACTIVE   0x0080
+#define SLSI_HOSTSTATE_SAR_INIT_MASK        0x0083
+#define SLSI_HOSTSTATE_BASE_MASK            0x000C
+#define SLSI_HOSTSTATE_BASE_NONE            0
+#define SLSI_HOSTSTATE_BASE_MMW             1
+#define SLSI_HOSTSTATE_BASE_SUB6            2
+#define SLSI_HOSTSTATE_BASE_POS             2
+#define SLSI_HOSTSTATE_SUB6_BAND_MASK       0x0700
+#define SLSI_HOSTSTATE_SUB6_BAND_POS        8
+
 /* RTT ID: : A value (1-7) for identifying the RTT activity being requested. */
 #define SLSI_MIN_RTT_ID  1
 #define SLSI_MAX_RTT_ID  7
@@ -104,6 +137,9 @@
 			      HOME_AWAY_TIME_BIT | \
 			      MAX_CHANNEL_TIME_BIT | \
 			      MAX_CHANNEL_PASSIVE_TIME_BIT)
+
+/* system error buffer size */
+#define SYSTEM_ERROR_BUFFER_SZ    4096
 
 /* indices: 3= BW20->idx_0, BW40->idx_1, BW80->idx_2.
  *             2= noSGI->idx_0, SGI->idx_1
@@ -647,6 +683,7 @@ struct slsi_vif_sta {
 	/* Only valid when the VIF is activated */
 	u8                      vif_status;
 	bool                    is_wps;
+	bool                    roam_on_disconnect;
 	u16                     eap_hosttag;
 	u16                     m4_host_tag;
 	u16                     keepalive_host_tag[SLSI_MAX_KEEPALIVE_ID];
@@ -706,6 +743,7 @@ struct slsi_vif_sta {
 	u32                     channels_5_ghz;
 #if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
 	bool                    drv_bss_selection;
+	bool                    drv_connect_req_ongoing;
 
 	/* save connection parameters in order to retry connection */
 	struct                         cfg80211_connect_params sme;
@@ -1027,9 +1065,7 @@ struct netdev_vif {
 	u8 target_ip_addr[4];
 	int enhanced_arp_host_tag[SLSI_MAX_ARP_SEND_FRAME];
 #endif
-#ifdef CONFIG_SCSC_WLAN_FAST_RECOVERY
 	struct cfg80211_ap_settings backup_settings;
-#endif
 #ifdef CONFIG_SCSC_WLAN_ARP_FLOW_CONTROL
 	atomic_t                   arp_tx_count;
 #endif
@@ -1065,6 +1101,15 @@ struct slsi_ioctl_args {
 struct slsi_roam_scan_channels {
 	int n;
 	u8  channels[SLSI_MAX_CHANNEL_LIST];
+};
+
+enum slsi_sub6_state {
+	SUB6_SAR_1 = 1,
+	SUB6_SAR_2,
+	SUB6_SAR_3,
+	SUB6_SAR_4,
+	SUB6_SAR_5,
+	SUB6_SAR_6,
 };
 
 struct slsi_dev_config {
@@ -1125,7 +1170,8 @@ struct slsi_dev_config {
 
 	int                                     ap_disconnect_ind_timeout;
 
-	u8                                      host_state;
+	u16                                     host_state;
+	bool                                    host_state_sub6_band;
 
 	int                                     rssi_boost_5g;
 	int                                     rssi_boost_2g;
@@ -1235,6 +1281,13 @@ struct slsi_dev_mib_collect {
 
 #endif
 
+struct sys_error_log {
+	int                        pos;
+	char                       *log_buf;
+	int                        log_buf_size;
+	struct mutex               log_buf_mutex;
+};
+
 struct slsi_dev {
 	/* Devices */
 	struct device              *dev;
@@ -1262,6 +1315,7 @@ struct slsi_dev {
 	int                        netdev_up_count;
 	struct net_device          __rcu *netdev[CONFIG_SCSC_WLAN_MAX_INTERFACES + 1];               /* 0 is reserved */
 	struct net_device          __rcu *netdev_ap;
+	struct net_device          __rcu *netdev_p2p;
 	u8                         netdev_addresses[CONFIG_SCSC_WLAN_MAX_INTERFACES + 1][ETH_ALEN];  /* 0 is reserved */
 	bool                       require_vif_delete[CONFIG_SCSC_WLAN_MAX_INTERFACES + 1];
 	int                        device_state;
@@ -1273,9 +1327,12 @@ struct slsi_dev {
 	/* BoT */
 	atomic_t                   in_pause_state;
 	struct work_struct recovery_work_on_stop;   /* Work on failure_reset recovery*/
-#ifdef CONFIG_SCSC_WLAN_FAST_RECOVERY
 	struct work_struct recovery_work;   /* Work on subsystem_reset recovery*/
 	struct work_struct recovery_work_on_start;   /* Work on chip recovery*/
+	struct work_struct trigger_wlan_fail_work;   /* Work on mlme cfm or ind timeout*/
+	struct work_struct system_error_user_fail_work;   /* Work on system error */
+#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 12
+	struct work_struct chipset_logging_work; /* Work for chipset logging */
 #endif
 	/* Locking used to control Starting and stopping the chip */
 #ifdef CONFIG_SCSC_WLAN_MUTEX_DEBUG
@@ -1371,7 +1428,10 @@ struct slsi_dev {
 	struct completion          recovery_remove_completion;
 	struct completion          recovery_stop_completion;
 	struct completion          recovery_completed;
+	struct completion          service_fail_started_indication;
+	struct completion          recovery_fail_safe_complete;
 	int                        recovery_status;
+	bool                       recovery_fail_safe;
 	struct slsi_ssid_map       ssid_map[SLSI_SCAN_SSID_MAP_MAX];
 	bool                       band_5g_supported;
 	int                        supported_2g_channels[14];
@@ -1440,8 +1500,13 @@ struct slsi_dev {
 	u8                         latency_param_mask;
 	bool                       detect_vif_active;
 	bool                       max_dtim_recv;
+#ifndef SCSC_SEP_VERSION
 	bool                       forced_se_7;
+#endif
 	bool                       igmp_offload_activated;
+	int                        default_scan_ies_len;
+	u8                         *default_scan_ies;
+	struct sys_error_log       sys_error_log_buf;
 };
 
 /* Compact representation of channels a ESS has been seen on
@@ -1506,12 +1571,14 @@ int slsi_get_nan_max_ndp_instances(void);
 int slsi_get_nan_max_ndi_ifaces(void);
 int slsi_get_nan_ndp_delay(void);
 int slsi_get_nan_ndp_max_time(void);
+bool slsi_get_nan_mac_random(void);
 #endif
+bool slsi_get_legacy_sar_backoff(void);
 void slsi_sched_scan_stopped(struct work_struct *work);
 bool slsi_dev_rtt_supported(void);
-#ifdef CONFIG_SCSC_WLAN_DEBUG_MLME_WORK_STRUCT
 struct slsi_dev *slsi_get_sdev(void);
-#endif
+void slsi_dump_system_error_buffer(struct slsi_dev *sdev);
+void slsi_add_log_to_system_error_buffer(struct slsi_dev *sdev, char *input_buffer);
 
 static inline u16 slsi_tx_host_tag(struct slsi_dev *sdev, enum slsi_traffic_q tq)
 {
