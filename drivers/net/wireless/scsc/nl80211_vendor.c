@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2014 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2014 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 #include <linux/version.h>
@@ -1041,8 +1041,9 @@ static int slsi_gscan_add_mlme(struct slsi_dev *sdev, struct slsi_nl_gscan_param
 	struct slsi_gscan_param      gscan_param;
 	struct net_device            *dev;
 	int                          ret = 0;
-	int                          i, j;
+	int                          i;
 #ifdef CONFIG_SCSC_WLAN_ENABLE_MAC_RANDOMISATION
+	int j;
 	u8 mac_addr_mask[ETH_ALEN];
 #endif
 
@@ -1369,6 +1370,59 @@ void slsi_rx_rssi_report_ind(struct slsi_dev *sdev, struct net_device *dev, stru
 	slsi_vendor_event(sdev, SLSI_NL80211_RSSI_REPORT_EVENT, &event_data, sizeof(event_data));
 	kfree_skb(skb);
 	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+}
+
+static int slsi_set_vendor_ie(struct wiphy *wiphy,
+			      struct wireless_dev *wdev, const void *data, int len)
+{
+	struct slsi_dev     *sdev = SDEV_FROM_WIPHY(wiphy);
+	struct net_device   *net_dev;
+	struct netdev_vif   *ndev_vif;
+	const struct nlattr *attr;
+	int                 r = 0;
+	int                 temp;
+	int                 type;
+	u8                  *ie_list = NULL;
+	int                 ie_list_len = 0;
+
+	net_dev = slsi_get_netdev(sdev, SLSI_NET_INDEX_WLAN);
+	ndev_vif = netdev_priv(net_dev);
+
+	SLSI_INFO(sdev, "Vendor CMD SCAN_DEFAULT_IES\n");
+	nla_for_each_attr(attr, data, len, temp) {
+		if (!attr)
+			return -EINVAL;
+		type = nla_type(attr);
+		switch (type) {
+		case SLSI_SCAN_DEFAULT_IES:
+		{
+			if (!nla_len(attr))
+				break;
+			ie_list =  kmalloc(nla_len(attr), GFP_KERNEL);
+			if (!ie_list) {
+				SLSI_ERR(sdev, "No memory for ie_list!");
+				return -ENOMEM;
+			}
+			memcpy(ie_list, nla_data(attr), nla_len(attr));
+			ie_list_len = nla_len(attr);
+			SLSI_INFO(sdev, "SCAN_DEFAULT_IES Len:%d\n", ie_list_len);
+			break;
+		}
+		default:
+			if (type > SLSI_SCAN_DEFAULT_MAX)
+				SLSI_ERR(sdev, "Invalid type : %d\n", type);
+			break;
+		}
+	}
+
+	SLSI_MUTEX_LOCK(ndev_vif->vif_mutex);
+	kfree(sdev->default_scan_ies);
+	sdev->default_scan_ies_len = ie_list_len;
+	sdev->default_scan_ies = (u8 *)ie_list;
+	if (ndev_vif->activated)
+		r = slsi_add_probe_ies_request(sdev, net_dev);
+	SLSI_MUTEX_UNLOCK(ndev_vif->vif_mutex);
+	return r;
 }
 
 #ifdef CONFIG_SCSC_WLAN_KEY_MGMT_OFFLOAD
@@ -5656,6 +5710,12 @@ slsi_wlan_vendor_acs_policy[SLSI_ACS_ATTR_MAX + 1] = {
 };
 
 static const struct nla_policy
+slsi_wlan_vendor_default_scan_policy[SLSI_SCAN_DEFAULT_MAX + 1] = {
+	[SLSI_SCAN_DEFAULT_IE_LEN] = {.type = NLA_U32},
+	[SLSI_SCAN_DEFAULT_IES] = {.type = NLA_BINARY},
+};
+
+static const struct nla_policy
 slsi_wlan_vendor_lls_policy[LLS_ATTRIBUTE_MAX + 1] = {
 	[LLS_ATTRIBUTE_SET_MPDU_SIZE_THRESHOLD] = {.type = NLA_U32},
 	[LLS_ATTRIBUTE_SET_AGGR_STATISTICS_GATHERING] = {.type = NLA_U32},
@@ -6061,6 +6121,14 @@ static struct wiphy_vendor_command slsi_vendor_cmd[] = {
 		.doit = slsi_key_mgmt_set_pmk
 	},
 #endif
+	{
+		{
+			.vendor_id = OUI_SAMSUNG,
+			.subcmd = SLSI_NL80211_VENDOR_SUBCMD_DEFAULT_SCAN_IES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = slsi_set_vendor_ie
+	},
 	{
 		{
 			.vendor_id = OUI_SAMSUNG,
@@ -6659,6 +6727,10 @@ static void slsi_nll80211_vendor_init_policy(struct wiphy_vendor_command *slsi_v
 		case SLSI_NL80211_VENDOR_SUBCMD_ACS_INIT:
 			vcmd->policy = slsi_wlan_vendor_acs_policy;
 			vcmd->maxattr = SLSI_ACS_ATTR_MAX;
+			break;
+		case SLSI_NL80211_VENDOR_SUBCMD_DEFAULT_SCAN_IES:
+			vcmd->policy = slsi_wlan_vendor_default_scan_policy;
+			vcmd->maxattr = SLSI_SCAN_DEFAULT_MAX;
 			break;
 		case SLSI_NL80211_VENDOR_SUBCMD_APF_GET_CAPABILITIES:
 			vcmd->policy = VENDOR_CMD_RAW_DATA;
