@@ -1031,24 +1031,24 @@ void hip4_set_napi_cpu(struct slsi_hip4 *hip, u8 napi_cpu, bool perf_mode)
 
 		SLSI_INFO_NODEV("disable NAPI on CPU%d\n", napi_select_cpu);
 		clear_bit(SLSI_HIP_NAPI_STATE_ENABLED, &hip->hip_priv->napi_state);
+		napi_select_cpu = napi_cpu;
 
 		/* napi_disable may sleep, so release the lock */
 		spin_unlock_irqrestore(&hip->hip_priv->napi_cpu_lock, flags);
 		napi_disable(&hip->hip_priv->napi);
 
-		local_bh_disable();
-		spin_lock_irqsave(&hip->hip_priv->napi_cpu_lock, flags);
-		napi_select_cpu = napi_cpu;
 #if defined(CONFIG_SOC_S5E9815) && defined(CONFIG_SCSC_QOS)
 		/**
 		 * In case where irq affinity set is failed,
 		 * we allow that IRQ and napi are scheduled in different core.
 		 */
-		spin_unlock_irqrestore(&hip->hip_priv->napi_cpu_lock, flags);
 		if (scsc_service_set_affinity_cpu(sdev->service, napi_select_cpu) != 0)
 			SLSI_ERR_NODEV("failed to change IRQ affinity (CPU%d)\n", napi_select_cpu);
-		spin_lock_irqsave(&hip->hip_priv->napi_cpu_lock, flags);
 #endif
+
+		local_bh_disable();
+		spin_lock_irqsave(&hip->hip_priv->napi_cpu_lock, flags);
+
 		hip_priv->napi_perf_mode = perf_mode;
 		if (!test_and_set_bit(SLSI_HIP_NAPI_STATE_ENABLED, &hip->hip_priv->napi_state)) {
 			SLSI_INFO_NODEV("enable NAPI on CPU%d\n", napi_select_cpu);
@@ -1398,6 +1398,34 @@ static void hip4_irq_handler_ctrl(int irq, void *data)
 	SCSC_HIP4_SAMPLER_INT_OUT(hip->hip_priv->minor, 1);
 }
 
+void hip4_sched_wq_ctrl(struct slsi_hip4 *hip)
+{
+	struct slsi_dev     *sdev = container_of(hip, struct slsi_dev, hip4_inst);
+
+	if (!hip || !sdev || !sdev->service || !hip->hip_priv)
+		return;
+
+	if (atomic_read(&hip->hip_priv->closing))
+		return;
+
+	hip4_dump_dbg(hip, NULL, NULL, sdev->service);
+
+	if (!slsi_wake_lock_active(&hip->hip_priv->hip4_wake_lock_ctrl)) {
+		slsi_wake_lock_timeout(&hip->hip_priv->hip4_wake_lock_ctrl, msecs_to_jiffies(SLSI_HIP_WAKELOCK_TIME_OUT_IN_MS));
+#ifdef CONFIG_SCSC_WLAN_ANDROID
+		SCSC_WLOG_WAKELOCK(WLOG_LAZY, WL_TAKEN, "hip4_wake_lock_ctrl", WL_REASON_RX);
+#endif
+	}
+
+	SLSI_DBG1(sdev, SLSI_HIP, "Trigger wq for skipped ctrl BH\n");
+
+	if (hip4_system_wq)
+		schedule_work(&hip->hip_priv->intr_wq_ctrl);
+	else
+		if(!queue_work(hip->hip_priv->hip4_workq, &hip->hip_priv->intr_wq_ctrl))
+			SLSI_DBG1(sdev, SLSI_HIP, "hip4_wq_ctrl is already scheduled\n");
+}
+
 static int hip4_napi_poll(struct napi_struct *napi, int budget)
 {
 	struct hip4_priv        *hip_priv = container_of(napi, struct hip4_priv, napi);
@@ -1448,7 +1476,7 @@ static int hip4_napi_poll(struct napi_struct *napi, int budget)
 	}
 
 	if (atomic_read(&sdev->hip.hip_state) != SLSI_HIP_STATE_STARTED) {
-		napi_complete(napi);
+		napi_complete_done(napi, 0);
 		spin_unlock_bh(&in_napi_context);
 		return 0;
 	}
@@ -1468,11 +1496,11 @@ static int hip4_napi_poll(struct napi_struct *napi, int budget)
 	service = sdev->service;
 
 	if (idx_r == idx_w) {
-		SLSI_DBG4(sdev, SLSI_RX, "nothing to do, NAPI Complete\n");
+		SLSI_DBG3(sdev, SLSI_RX, "nothing to do, NAPI Complete\n");
 		hip->hip_priv->napi_rx_full_cnt = 0;
 		hip_priv->napi_rx_saturated = 0;
 		bh_end_data = ktime_get();
-		napi_complete(napi);
+		napi_complete_done(napi, 0);
 		if (!atomic_read(&hip->hip_priv->closing)) {
 			/* Nothing more to drain, unmask interrupt */
 			scsc_service_mifintrbit_bit_unmask(sdev->service, hip->hip_priv->intr_tohost_mul[HIP4_MIF_Q_TH_DAT]);
@@ -1496,7 +1524,7 @@ static int hip4_napi_poll(struct napi_struct *napi, int budget)
 #endif
 
 	todo = ((idx_w - idx_r) & 0xff);
-	SLSI_DBG4(sdev, SLSI_RX, "todo:%hhu\n", todo);
+	SLSI_DBG3(sdev, SLSI_RX, "todo:%hhu\n", todo);
 
 	/* check if Rx queue is saturating and if so move to performance mode */
 	if (!napi_select_cpu && !hip_priv->napi_perf_mode && !hip_priv->napi_rx_saturated) {
@@ -1590,11 +1618,11 @@ consume_dat_mbulk:
 	hip4_update_index(hip, HIP4_MIF_Q_TH_DAT, ridx, idx_r);
 
 	if (work_done < budget) {
-		SLSI_DBG4(sdev, SLSI_RX, "NAPI complete (work_done:%d)\n", work_done);
+		SLSI_DBG3(sdev, SLSI_RX, "NAPI complete (work_done:%d)\n", work_done);
 		bh_end_data = ktime_get();
 		hip->hip_priv->napi_rx_full_cnt = 0;
 		hip_priv->napi_rx_saturated = 0;
-		napi_complete(napi);
+		napi_complete_done(napi, work_done);
 		if (!atomic_read(&hip->hip_priv->closing)) {
 			/* Nothing more to drain, unmask interrupt */
 			scsc_service_mifintrbit_bit_unmask(sdev->service, hip->hip_priv->intr_tohost_mul[HIP4_MIF_Q_TH_DAT]);
@@ -1607,7 +1635,7 @@ consume_dat_mbulk:
 		}
 	}
 end:
-	SLSI_DBG4(sdev, SLSI_RX, "work done:%d\n", work_done);
+	SLSI_DBG3(sdev, SLSI_RX, "work done:%d\n", work_done);
 	SCSC_HIP4_SAMPLER_INT_OUT_BH(hip->hip_priv->minor, 0);
 	spin_unlock_bh(&hip_priv->rx_lock);
 	spin_unlock_bh(&in_napi_context);

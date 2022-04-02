@@ -1,6 +1,6 @@
 /*****************************************************************************
  *
- * Copyright (c) 2012 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -157,6 +157,15 @@ enum slsi_acs_attr_offload {
 	SLSI_ACS_ATTR_AFTER_LAST,
 	SLSI_ACS_ATTR_MAX =
 	SLSI_ACS_ATTR_AFTER_LAST - 1
+};
+
+enum slsi_scan_attr_config {
+	SLSI_SCAN_DEFAULT_IE_LEN = 1,
+	SLSI_SCAN_DEFAULT_IES,
+	/* keep last */
+	SLSI_SCAN_DEFAULT_AFTER_LAST,
+	SLSI_SCAN_DEFAULT_MAX =
+	SLSI_SCAN_DEFAULT_AFTER_LAST - 1,
 };
 
 #ifdef CONFIG_SLSI_WLAN_STA_FWD_BEACON
@@ -390,6 +399,7 @@ enum slsi_supp_vendor_subcmds {
 	SLSI_NL80211_VENDOR_SUBCMD_UNSPEC = 0,
 	SLSI_NL80211_VENDOR_SUBCMD_KEY_MGMT_SET_KEY,
 	SLSI_NL80211_VENDOR_SUBCMD_ACS_INIT,
+	SLSI_NL80211_VENDOR_SUBCMD_DEFAULT_SCAN_IES
 };
 
 enum slsi_vendor_event_values {

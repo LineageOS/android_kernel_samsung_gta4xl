@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2022 Samsung Electronics Co., Ltd. All rights reserved
  *
  ****************************************************************************/
 
@@ -153,6 +153,7 @@
 
 #define CMD_SET_TX_POWER_SAR "SET_TX_POWER_SAR"
 #define CMD_GET_TX_POWER_SAR "GET_TX_POWER_SAR"
+#define CMD_SET_TX_POWER_SUB6_BAND "SET_TX_POWER_SUB6_BAND"
 
 #define CMD_POWER_MEASUREMENT_START "POWER_MEASUREMENT_START"
 
@@ -171,6 +172,7 @@
 
 #ifdef CONFIG_SCSC_WLAN_DYNAMIC_ITO
 #define CMD_SET_ITO "SET_ITO"
+#define CMD_ENABLE_ITO "ENABLE_ITO"
 #endif
 
 #define CMD_ELNA_BYPASS              "ELNA_BYPASS"
@@ -325,7 +327,7 @@ static int slsi_set_suspend_mode(struct net_device *dev, char *command, int cmd_
 	struct slsi_ioctl_args *ioctl_args = NULL;
 	int               user_suspend_mode;
 	int               previous_suspend_mode;
-	u8                host_state;
+	u16               host_state = 0;
 	int               ret = 0;
 	int vif;
 
@@ -3585,14 +3587,14 @@ static int slsi_update_rssi_boost(struct net_device *dev, char *buffer, int buf_
 	return -EINVAL;
 }
 
-int slsi_set_tx_power_calling(struct net_device *dev, char *command, int buf_len)
+int slsi_set_tx_power_calling_legacy(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif    *ndev_vif = netdev_priv(dev);
 	struct slsi_dev      *sdev = ndev_vif->sdev;
 	struct slsi_ioctl_args *ioctl_args = NULL;
 	int                  mode = 0;
 	int                  error = 0;
-	u8                   host_state;
+	u16                  host_state = 0;
 
 	ioctl_args = slsi_get_private_command_args(command, buf_len, 1);
 	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
@@ -3631,6 +3633,93 @@ int slsi_set_tx_power_calling(struct net_device *dev, char *command, int buf_len
 	return error;
 }
 
+int slsi_set_tx_power_calling_non_legacy(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif    *ndev_vif = netdev_priv(dev);
+	struct slsi_dev      *sdev = ndev_vif->sdev;
+	struct slsi_ioctl_args *ioctl_args = NULL;
+	int                  mode = 0;
+	int                  error = 0;
+	u16                  host_state = 0;
+
+	ioctl_args = slsi_get_private_command_args(command, buf_len, 1);
+	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
+
+	if (!slsi_str_to_int(ioctl_args->args[0], &mode)) {
+		SLSI_ERR(sdev, "Invalid string: '%s'\n", ioctl_args->args[0]);
+		kfree(ioctl_args);
+		return -EINVAL;
+	}
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	host_state = sdev->device_config.host_state;
+
+	switch (mode) {
+	case HEAD_SAR_BACKOFF_DISABLED:
+		host_state &= ~SLSI_HOSTSTATE_HEAD_SAR_ACTIVE;
+		break;
+	case HEAD_SAR_BACKOFF_ENABLED:
+		host_state |= SLSI_HOSTSTATE_HEAD_SAR_ACTIVE;
+		break;
+	case BODY_SAR_BACKOFF_DISABLED:
+		host_state &= ~SLSI_HOSTSTATE_GRIP_SAR_ACTIVE;
+		break;
+	case BODY_SAR_BACKOFF_ENABLED:
+		host_state |= SLSI_HOSTSTATE_GRIP_SAR_ACTIVE;
+		break;
+	case NR_MMWAVE_SAR_BACKOFF_DISABLED:
+		host_state &= ~(SLSI_HOSTSTATE_BASE_MMW << SLSI_HOSTSTATE_BASE_POS);
+		break;
+	case NR_MMWAVE_SAR_BACKOFF_ENABLED:
+		host_state &= ~SLSI_HOSTSTATE_BASE_MASK;
+		host_state |= SLSI_HOSTSTATE_BASE_MMW << SLSI_HOSTSTATE_BASE_POS;
+		break;
+	case NR_SUB6_SAR_BACKOFF_DISABLED:
+		sdev->device_config.host_state_sub6_band = false;
+		host_state &= ~(SLSI_HOSTSTATE_SUB6_BAND_MASK | SLSI_HOSTSTATE_BASE_MASK);
+		break;
+	case NR_SUB6_SAR_BACKOFF_ENABLED:
+		sdev->device_config.host_state_sub6_band = true;
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		kfree(ioctl_args);
+		return error;
+	case SAR_BACKOFF_DISABLE_ALL:
+		host_state &= SLSI_HOSTSTATE_SAR_INIT_MASK;
+		break;
+	case MHS_SAR_BACKOFF_DISABLED:
+		host_state &= ~SLSI_HOSTSTATE_MHS_SAR_ACTIVE;
+		break;
+	case MHS_SAR_BACKOFF_ENABLED:
+		host_state |= SLSI_HOSTSTATE_MHS_SAR_ACTIVE;
+		break;
+	default:
+		SLSI_ERR(sdev, "Invalid mode: '%s'\n", ioctl_args->args[0]);
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+	kfree(ioctl_args);
+	return -EINVAL;
+	}
+
+	error = slsi_mlme_set_host_state(sdev, dev, host_state);
+	if (!error)
+		sdev->device_config.host_state = host_state;
+
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+	kfree(ioctl_args);
+	return error;
+}
+
+int slsi_set_tx_power_calling(struct net_device *dev, char *command, int buf_len)
+{
+	int ret = 0;
+
+	if (slsi_get_legacy_sar_backoff())
+		ret = slsi_set_tx_power_calling_legacy(dev, command, buf_len);
+	else
+		ret = slsi_set_tx_power_calling_non_legacy(dev, command, buf_len);
+
+	return ret;
+}
+
 int slsi_set_tx_power_sar(struct net_device *dev, char *command, int buf_len)
 {
 	struct netdev_vif    *ndev_vif = netdev_priv(dev);
@@ -3638,7 +3727,12 @@ int slsi_set_tx_power_sar(struct net_device *dev, char *command, int buf_len)
 	struct slsi_ioctl_args *ioctl_args = NULL;
 	int                  mode = 0;
 	int                  error = 0;
-	u8                   host_state;
+	u16                  host_state = 0;
+
+	if (!slsi_get_legacy_sar_backoff()) {
+		SLSI_ERR(sdev, "Legacy SAR Backoff is false\n");
+		return -EINVAL;
+	}
 
 	ioctl_args = slsi_get_private_command_args(command, buf_len, 1);
 	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
@@ -3677,7 +3771,12 @@ int slsi_get_tx_power_sar(struct net_device *dev, char *command, int buf_len)
 	struct netdev_vif        *ndev_vif = netdev_priv(dev);
 	struct slsi_dev      *sdev = ndev_vif->sdev;
 	int len = 0;
-	u8                   host_state, index;
+	u16                   host_state = 0, index = 0;
+
+	if (!slsi_get_legacy_sar_backoff()) {
+		SLSI_ERR(sdev, "Legacy SAR Backoff is false\n");
+		return -EINVAL;
+	}
 
 	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
 	host_state = sdev->device_config.host_state;
@@ -3691,6 +3790,77 @@ int slsi_get_tx_power_sar(struct net_device *dev, char *command, int buf_len)
 	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
 
 	return len;
+}
+
+int slsi_set_tx_power_sub6_band(struct net_device *dev, char *command, int buf_len)
+{
+	struct netdev_vif    *ndev_vif = netdev_priv(dev);
+	struct slsi_dev      *sdev = ndev_vif->sdev;
+	struct slsi_ioctl_args *ioctl_args = NULL;
+	int                  mode = 0;
+	int                  error = 0;
+	u16                  host_state = 0;
+
+	if (slsi_get_legacy_sar_backoff()) {
+		SLSI_ERR(sdev, "Legacy SAR Backoff is True\n");
+		return -EINVAL;
+	}
+
+	ioctl_args = slsi_get_private_command_args(command, buf_len, 1);
+	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
+
+	if (!sdev->device_config.host_state_sub6_band) {
+		SLSI_ERR(sdev, "'SET_TX_POWER_CALLING 6' must be called first.\n");
+		kfree(ioctl_args);
+		return -EINVAL;
+	}
+
+	if (!slsi_str_to_int(ioctl_args->args[0], &mode)) {
+		SLSI_ERR(sdev, "Invalid string: '%s'\n", ioctl_args->args[0]);
+		kfree(ioctl_args);
+		return -EINVAL;
+	}
+
+	SLSI_MUTEX_LOCK(sdev->device_config_mutex);
+	host_state = sdev->device_config.host_state;
+
+	host_state &= ~(SLSI_HOSTSTATE_SUB6_BAND_MASK | SLSI_HOSTSTATE_BASE_MASK);
+	host_state |= SLSI_HOSTSTATE_BASE_SUB6 << SLSI_HOSTSTATE_BASE_POS;
+
+	switch (mode) {
+	case SUB6_SAR_1_BAND:
+		host_state |= (SUB6_SAR_1 << SLSI_HOSTSTATE_SUB6_BAND_POS);
+		break;
+	case SUB6_SAR_2_BAND:
+		host_state |= (SUB6_SAR_2 << SLSI_HOSTSTATE_SUB6_BAND_POS);
+		break;
+	case SUB6_SAR_3_BAND:
+		host_state |= (SUB6_SAR_3 << SLSI_HOSTSTATE_SUB6_BAND_POS);
+		break;
+	case SUB6_SAR_4_BAND:
+		host_state |= (SUB6_SAR_4 << SLSI_HOSTSTATE_SUB6_BAND_POS);
+		break;
+	case SUB6_SAR_5_BAND:
+		host_state |= (SUB6_SAR_5 << SLSI_HOSTSTATE_SUB6_BAND_POS);
+		break;
+	case SUB6_SAR_6_BAND:
+		host_state |= (SUB6_SAR_6 << SLSI_HOSTSTATE_SUB6_BAND_POS);
+		break;
+	default:
+		SLSI_ERR(sdev, "Invalid mode: '%s'\n", ioctl_args->args[0]);
+		SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+		kfree(ioctl_args);
+		return -EINVAL;
+	}
+
+	error = slsi_mlme_set_host_state(sdev, dev, host_state);
+	if (!error)
+		sdev->device_config.host_state = host_state;
+
+	SLSI_MUTEX_UNLOCK(sdev->device_config_mutex);
+
+	kfree(ioctl_args);
+	return error;
 }
 
 static int slsi_print_regulatory(struct slsi_802_11d_reg_domain *domain_info, char *buf, int buf_len, struct slsi_supported_channels *supported_channels, int supp_chan_length)
@@ -3930,7 +4100,7 @@ int slsi_set_fcc_channel(struct net_device *dev, char *cmd, int cmd_len)
 	struct slsi_ioctl_args *ioctl_args = NULL;
 	int                    status;
 	int                    fcc_channel_value;
-	u8                     host_state;
+	u16                    host_state = 0;
 
 	ioctl_args = slsi_get_private_command_args(cmd, cmd_len, 1);
 	SLSI_VERIFY_IOCTL_ARGS(sdev, ioctl_args);
@@ -5157,6 +5327,7 @@ static const struct slsi_ioctl_fn slsi_ioctl_fn_table[] = {
 	{ CMD_SET_TX_POWER_CALLING,         slsi_set_tx_power_calling },
 	{ CMD_SET_TX_POWER_SAR,             slsi_set_tx_power_sar },
 	{ CMD_GET_TX_POWER_SAR,             slsi_get_tx_power_sar },
+	{ CMD_SET_TX_POWER_SUB6_BAND,       slsi_set_tx_power_sub6_band },
 	{ CMD_POWER_MEASUREMENT_START,      slsi_start_power_measurement_detection },
 	{ CMD_GETREGULATORY,                slsi_get_regulatory },
 #ifdef CONFIG_SCSC_WLAN_HANG_TEST
@@ -5201,6 +5372,7 @@ static const struct slsi_ioctl_fn slsi_ioctl_fn_table[] = {
 
 #ifdef CONFIG_SCSC_WLAN_DYNAMIC_ITO
 	{ CMD_SET_ITO,                      slsi_set_ito },
+	{ CMD_ENABLE_ITO,                   slsi_enable_ito },
 #endif
 	{ CMD_GET_CU,                       slsi_get_cu },
 	{ CMD_ELNA_BYPASS_INT,              slsi_elna_bypass_int },

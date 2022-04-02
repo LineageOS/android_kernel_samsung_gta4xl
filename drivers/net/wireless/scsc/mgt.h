@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright (c) 2012 - 2020 Samsung Electronics Co., Ltd. All rights reserved
+ * Copyright (c) 2012 - 2021 Samsung Electronics Co., Ltd. All rights reserved
  *
  *****************************************************************************/
 
@@ -71,15 +71,25 @@
 #define SLSI_80211_AC_BK 3
 
 /* IF Number (Index) based checks */
+#ifdef CONFIG_SCSC_WLAN_DUAL_STATION
+#define SLSI_IS_VIF_INDEX_WLAN(ndev_vif) (((ndev_vif)->ifnum == SLSI_NET_INDEX_WLAN) ||\
+					  (((ndev_vif)->ifnum == SLSI_NET_INDEX_P2PX_SWLAN) && ((ndev_vif)->iftype == NL80211_IFTYPE_STATION)))
+#else
 #define SLSI_IS_VIF_INDEX_WLAN(ndev_vif) (ndev_vif->ifnum == SLSI_NET_INDEX_WLAN)
+#endif
 #define SLSI_IS_VIF_INDEX_P2P(ndev_vif) (ndev_vif->ifnum == SLSI_NET_INDEX_P2P)
 #if defined(CONFIG_SCSC_WLAN_WIFI_SHARING) || defined(CONFIG_SCSC_WLAN_DUAL_STATION)
 #define SLSI_IS_VIF_INDEX_P2P_GROUP(sdev, ndev_vif) ((ndev_vif->ifnum == SLSI_NET_INDEX_P2PX_SWLAN) &&\
 						     (sdev->netdev_ap != sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]))
-#define SLSI_IS_VIF_INDEX_MHS(sdev, ndev_vif) ((ndev_vif->ifnum == SLSI_NET_INDEX_P2PX_SWLAN) &&\
-					       (sdev->netdev_ap == sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]))
+#define SLSI_IS_VIF_INDEX_MHS_DUALSTA(sdev, ndev_vif) ((ndev_vif->ifnum == SLSI_NET_INDEX_P2PX_SWLAN) &&\
+							(sdev->netdev_ap == sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]))
 #else
 #define SLSI_IS_VIF_INDEX_P2P_GROUP(sdev, ndev_vif) (ndev_vif->ifnum == SLSI_NET_INDEX_P2PX_SWLAN)
+#endif
+#if defined(CONFIG_SCSC_WLAN_WIFI_SHARING)
+#define SLSI_IS_VIF_INDEX_MHS(sdev, ndev_vif) ((ndev_vif->ifnum == SLSI_NET_INDEX_P2PX_SWLAN) &&\
+					       (ndev_vif->iftype == NL80211_IFTYPE_AP) &&\
+					       (sdev->netdev_ap == sdev->netdev[SLSI_NET_INDEX_P2PX_SWLAN]))
 #endif
 #define SLSI_IS_VIF_INDEX_NAN(ndev_vif) ((ndev_vif)->ifnum == SLSI_NET_INDEX_NAN)
 
@@ -243,6 +253,7 @@
 #define SLSI_RECOVERY_SERVICE_STOPPED    1
 #define SLSI_RECOVERY_SERVICE_CLOSED   2
 #define SLSI_RECOVERY_SERVICE_OPENED    3
+#define SLSI_DEFAULT_HW_MAC_ADDR    "\x00\x00\x0F\x11\x22\x33"
 
 enum slsi_dhcp_tx {
 	SLSI_TX_IS_NOT_DHCP,
@@ -592,6 +603,7 @@ struct net_device *slsi_dynamic_interface_create(struct wiphy        *wiphy,
 					     const char          *name,
 					     enum nl80211_iftype type,
 					     struct vif_params   *params);
+void slsi_stop_chip(struct slsi_dev *sdev);
 int slsi_get_beacon_cu(struct slsi_dev *sdev, struct net_device *dev, int *mib_value);
 int slsi_get_mib_roam(struct slsi_dev *sdev, u16 psid, int *mib_value);
 void slsi_roam_channel_cache_add(struct slsi_dev *sdev, struct net_device *dev, struct sk_buff *skb);
@@ -632,9 +644,10 @@ int slsi_test_send_hanged_vendor_event(struct net_device *dev);
 #endif
 int slsi_send_power_measurement_vendor_event(struct slsi_dev *sdev, s16 power_in_db);
 #if defined(CONFIG_SLSI_WLAN_STA_FWD_BEACON) && (defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 10)
-int slsi_send_forward_beacon_vendor_event(struct slsi_dev *sdev, const u8 *ssid, const int ssid_len, const u8 *bssid,
-					  u8 channel, const u16 beacon_int, const u64 timestamp, const u64 sys_time);
-int slsi_send_forward_beacon_abort_vendor_event(struct slsi_dev *sdev, u16 reason_code);
+int slsi_send_forward_beacon_vendor_event(struct slsi_dev *sdev, struct net_device *dev,
+					  const u8 *ssid, const int ssid_len, const u8 *bssid, u8 channel,
+					  const u16 beacon_int, const u64 timestamp, const u64 sys_time);
+int slsi_send_forward_beacon_abort_vendor_event(struct slsi_dev *sdev, struct net_device *dev, u16 reason_code);
 #endif
 void slsi_wlan_dump_public_action_subtype(struct slsi_dev *sdev, struct ieee80211_mgmt *mgmt, bool tx);
 #if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
@@ -650,15 +663,20 @@ int slsi_configure_tx_power_sar_scenario(struct net_device *dev, int mode);
 /* Sysfs based mac address override */
 void slsi_create_sysfs_macaddr(void);
 void slsi_destroy_sysfs_macaddr(void);
+#if defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION >= 12
+void slsi_create_sysfs_debug_dump(void);
+void slsi_destroy_sysfs_debug_dump(void);
+void slsi_collect_chipset_logs(struct work_struct *work);
+#endif
 int slsi_find_chan_idx(u16 chan, u8 hw_mode);
 int slsi_set_latency_mode(struct net_device *dev, int latency_mode, int cmd_len);
+void slsi_trigger_service_failure(struct work_struct *work);
 void slsi_failure_reset(struct work_struct *work);
-#ifdef CONFIG_SCSC_WLAN_FAST_RECOVERY
 int slsi_start_ap(struct wiphy *wiphy, struct net_device *dev,
 		  struct cfg80211_ap_settings *settings);
 void slsi_subsystem_reset(struct work_struct *work);
 void slsi_chip_recovery(struct work_struct *work);
-#endif
+void slsi_system_error_recovery(struct work_struct *work);
 int slsi_set_acl(struct slsi_dev *sdev, struct net_device *dev);
 void slsi_purge_blacklist(struct netdev_vif *ndev_vif);
 void slsi_rx_update_wake_stats(struct slsi_dev *sdev, struct ethhdr *ehdr, int buff_len);
@@ -667,8 +685,17 @@ bool slsi_is_bssid_in_hal_blacklist(struct net_device *dev, u8 *bssid);
 bool slsi_is_bssid_in_ioctl_blacklist(struct net_device *dev, u8 *bssid);
 int slsi_remove_bssid_blacklist(struct slsi_dev *sdev, struct net_device *dev, u8 *addr);
 int slsi_add_ioctl_blacklist(struct slsi_dev *sdev, struct net_device *dev, u8 *addr);
+u8 *slsi_get_scan_extra_ies(struct slsi_dev *sdev, const u8 *ies,
+			    int total_len, int *extra_len);
 
 #ifdef CONFIG_SCSC_WLAN_DYNAMIC_ITO
 int slsi_set_ito(struct net_device *dev, char *command, int buf_len);
+int slsi_enable_ito(struct net_device *dev, char *command, int buf_len);
 #endif
+#if !(defined(SCSC_SEP_VERSION) && SCSC_SEP_VERSION < 11)
+int slsi_retry_connection(struct slsi_dev *sdev, struct net_device *dev);
+void slsi_free_connection_params(struct slsi_dev *sdev, struct net_device *dev);
+#endif
+int slsi_add_probe_ies_request(struct slsi_dev *sdev, struct net_device *dev);
+
 #endif /*__SLSI_MGT_H__*/
