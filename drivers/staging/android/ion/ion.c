@@ -375,7 +375,6 @@ static void ion_dma_buf_kunmap(struct dma_buf *dmabuf, unsigned long offset,
 		ion_buffer_kmap_put(buffer);
 		mutex_unlock(&buffer->lock);
 	}
-
 }
 
 static void *ion_dma_buf_vmap(struct dma_buf *dmabuf)
@@ -408,6 +407,7 @@ static int ion_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 {
 	struct ion_buffer *buffer = dmabuf->priv;
 	struct dma_buf_attachment *att;
+
 
 	mutex_lock(&dmabuf->lock);
 	list_for_each_entry(att, &dmabuf->attachments, node) {
