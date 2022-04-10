@@ -3848,7 +3848,6 @@
 			status = "okay";
 			pinctrl-names = "default";
 			pinctrl-0 = <0xffffffff 0xffffffff>;
-			samsung,delay_usecs = <0xc8>;
 			dma-mode;
 			dmas = <0xffffffff 0x15 0xffffffff 0x14>;
 
