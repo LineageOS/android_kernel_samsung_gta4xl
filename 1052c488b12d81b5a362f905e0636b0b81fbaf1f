@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "7399636e_43f33423",
+        "filename": "drivers/android/binder.c",
+        "patchSetId": 1
+      },
+      "lineNbr": 3472,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-04-10T14:26:39Z",
+      "side": 0,
+      "message": "This removal is questionable. Not only was it explicitly added in https://github.com/LineageOS/android_kernel_samsung_gta4xl/commit/f40f289b96bf8, but it wasn\u0027t a diff between DVA3 and EVC5:\nhttps://github.com/haggertk/android_kernel_samsung_gta4xl/commit/a5423b718fe0e24660bcc437788bcffad9aaeb9e#diff-dc675d837f5054b5e96c5fc9fcb77ad08b94607f88b692930132614aa83613b2",
+      "range": {
+        "startLine": 3466,
+        "startChar": 0,
+        "endLine": 3472,
+        "endChar": 3
+      },
+      "revId": "1052c488b12d81b5a362f905e0636b0b81fbaf1f",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
