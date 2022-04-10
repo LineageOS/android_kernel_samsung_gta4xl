@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "c38745d5_7c4a88c9",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-04-10T19:49:32Z",
+      "side": 1,
+      "message": "Since these are only sensorhub firmware changes, it probably makes sense to squash this into the sensorhub driver update.",
+      "revId": "c65af6e8a5b1126e0f20d9a8a04ec2ea7eb49121",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
