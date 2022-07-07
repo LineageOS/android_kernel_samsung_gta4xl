@@ -40,140 +40,17 @@ int __init sdp_crypto_init(void)
 }
 
 /* Codes are extracted from fs/crypto/crypto_sec.c */
-#ifdef CONFIG_CRYPTO_FIPS
-static struct crypto_rng *sdp_crypto_rng = NULL;
-#endif
 static struct crypto_shash *sha512_tfm = NULL;
-
-#ifdef CONFIG_CRYPTO_FIPS
-static int sdp_crypto_init_rng(void)
-{
-	struct crypto_rng *rng = NULL;
-	struct file *filp = NULL;
-	char *rng_seed = NULL;
-	mm_segment_t fs_type;
-
-	int trial = 10;
-	int read = 0;
-	int res = 0;
-
-	/* already initialized */
-	if (sdp_crypto_rng) {
-		printk(KERN_ERR "sdp_crypto: sdp_crypto_rng already initialized\n");
-		return 0;
-	}
-
-	rng_seed = kmalloc(SDP_CRYPTO_RNG_SEED_SIZE, GFP_KERNEL);
-	if (!rng_seed) {
-		printk(KERN_ERR "sdp_crypto: failed to allocate rng_seed memory\n");
-		res = -ENOMEM;
-		goto out;
-	}
-	memset((void *)rng_seed, 0, SDP_CRYPTO_RNG_SEED_SIZE);
-
-	// open random device for drbg seed number
-	filp = filp_open("/dev/random", O_RDONLY, 0);
-	if (IS_ERR(filp)) {
-		res = PTR_ERR(filp);
-		printk(KERN_ERR "sdp_crypto: failed to open random(err:%d)\n", res);
-		filp = NULL;
-		goto out;
-	}
-
-	fs_type = get_fs();
-	set_fs(KERNEL_DS);
-	while (trial > 0) {
-		int get_bytes = (int)filp->f_op->read(filp, &(rng_seed[read]),
-				SDP_CRYPTO_RNG_SEED_SIZE-read, &filp->f_pos);
-		if (likely(get_bytes > 0))
-			read += get_bytes;
-		if (likely(read == SDP_CRYPTO_RNG_SEED_SIZE))
-			break;
-		trial--;
-	}
-	set_fs(fs_type);
-
-	if (read != SDP_CRYPTO_RNG_SEED_SIZE) {
-		printk(KERN_ERR "sdp_crypto: failed to get enough random bytes "
-			"(read=%d / request=%d)\n", read, SDP_CRYPTO_RNG_SEED_SIZE);
-		res = -EINVAL;
-		goto out;
-	}
-
-	// create drbg for random number generation
-	rng = crypto_alloc_rng("stdrng", 0, 0);
-	if (IS_ERR(rng)) {
-		printk(KERN_ERR "sdp_crypto: failed to allocate rng, "
-			"not available (%ld)\n", PTR_ERR(rng));
-		res = PTR_ERR(rng);
-		rng = NULL;
-		goto out;
-	}
-
-	// push seed to drbg
-	res = crypto_rng_reset(rng, rng_seed, SDP_CRYPTO_RNG_SEED_SIZE);
-	if (res < 0)
-		printk(KERN_ERR "sdp_crypto: rng reset fail (%d)\n", res);
-out:
-	if (res && rng) {
-		crypto_free_rng(rng);
-		rng = NULL;
-	}
-	if (filp)
-		filp_close(filp, NULL);
-	kfree(rng_seed);
-
-	// save rng on global variable
-	sdp_crypto_rng = rng;
-	return res;
-}
-#endif
 
 int sdp_crypto_generate_key(void *raw_key, int nbytes)
 {
-#ifdef CONFIG_CRYPTO_FIPS
-	int res;
-	int trial = 10;
-
-	if (likely(sdp_crypto_rng)) {
-again:
-		BUG_ON(!sdp_crypto_rng);
-		return crypto_rng_get_bytes(sdp_crypto_rng,
-			raw_key, nbytes);
-	}
-
-	do {
-		res = sdp_crypto_init_rng();
-		if (!res)
-			goto again;
-
-		printk(KERN_DEBUG "sdp_crypto: try to sdp_crypto_init_rng(%d)\n", trial);
-		msleep(500);
-		trial--;
-
-	} while(trial > 0);
-
-	printk(KERN_ERR "sdp_crypto: failed to initialize "
-			"sdp crypto rng handler again (err:%d)\n", res);
-	return res;
-#else
 	get_random_bytes(raw_key, nbytes);
 	return 0;
-#endif
 }
 
 static void sdp_crypto_exit_rng(void)
 {
-#ifdef CONFIG_CRYPTO_FIPS
-	if (!sdp_crypto_rng)
-		return;
-
-	printk(KERN_DEBUG "sdp_crypto: release sdp crypto rng!\n");
-	crypto_free_rng(sdp_crypto_rng);
-	sdp_crypto_rng = NULL;
-#else
 	return;
-#endif
 }
 
 static void __exit sdp_crypto_exit_sha512(void)

@@ -16,44 +16,25 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sysctl.h>
-#include "fips140.h"
 
-/*
-	Notes:
-	1) The revision provides FIPS140ed kernel only
-	2) CONFIG_CRYPTO_FIPS meaning is different comparing to vanilla kernel, "FIPS 200" -> "FIPS 140-2"
-	3) provide fips_enable always ON 
-*/
-
-int fips_enabled = 1;
+int fips_enabled;
 EXPORT_SYMBOL_GPL(fips_enabled);
 
-static int IN_FIPS140_ERROR = FIPS140_NO_ERR;
-
-bool in_fips_err(void)
+/* Process kernel command-line parameter at boot time. fips=0 or fips=1 */
+static int fips_enable(char *str)
 {
-	return (IN_FIPS140_ERROR == FIPS140_ERR);
+	fips_enabled = !!simple_strtol(str, NULL, 0);
+	printk(KERN_INFO "fips mode: %s\n",
+		fips_enabled ? "enabled" : "disabled");
+	return 1;
 }
-EXPORT_SYMBOL_GPL(in_fips_err);
 
-void set_in_fips_err(void)
-{
-	IN_FIPS140_ERROR = FIPS140_ERR;
-}
-EXPORT_SYMBOL_GPL(set_in_fips_err);
-
-#ifdef CONFIG_CRYPTO_FIPS_FUNC_TEST
-void reset_in_fips_err(void)
-{
-	IN_FIPS140_ERROR = FIPS140_NO_ERR;
-}
-EXPORT_SYMBOL_GPL(reset_in_fips_err);
-#endif /* CONFIG_CRYPTO_FIPS_FUNC_TEST */
+__setup("fips=", fips_enable);
 
 static struct ctl_table crypto_sysctl_table[] = {
 	{
-		.procname       = "fips_status",
-		.data           = &IN_FIPS140_ERROR,
+		.procname       = "fips_enabled",
+		.data           = &fips_enabled,
 		.maxlen         = sizeof(int),
 		.mode           = 0444,
 		.proc_handler   = proc_dointvec
