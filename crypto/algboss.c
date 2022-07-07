@@ -212,7 +212,7 @@ static int cryptomgr_test(void *data)
 	u32 type = param->type;
 	int err = 0;
 
-#ifdef CONFIG_CRYPTO_FIPS /* FIPS_140_2 */
+#ifdef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
 	goto skiptest;
 #endif
 

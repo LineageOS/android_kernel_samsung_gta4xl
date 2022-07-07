@@ -3,17 +3,6 @@
 # Cryptographic API
 #
 
-ifeq ($(CONFIG_CRYPTO_FIPS), y)
-#ccflags-y += -DCONFIG_CRYPTO_FIPS_FUNC_TEST
-endif
-
-# ---------------------------------------
-# Keep this at the top of FIPS boundary
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_first_file.o
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_integrity.o
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_post.o
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_test.o
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_test_tv.o
 obj-$(CONFIG_CRYPTO_FIPS) += fips.o
 
 obj-$(CONFIG_CRYPTO) += crypto.o
@@ -55,11 +44,6 @@ CFLAGS_jitterentropy.o = -O0
 jitterentropy_rng-y := jitterentropy.o jitterentropy-kcapi.o
 obj-$(CONFIG_CRYPTO_GHASH) += ghash-generic.o
 obj-$(CONFIG_CRYPTO_KBKDF_CTR_HMAC_SHA512) += kbkdf.o
-
-# Keep this at the bottom of FIPS boundary
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_last_file.o
-obj-$(CONFIG_CRYPTO_FIPS) += fips140_out.o
-# ---------------------------------------
 
 obj-$(CONFIG_CRYPTO_WORKQUEUE) += crypto_wq.o
 obj-$(CONFIG_CRYPTO_ENGINE) += crypto_engine.o
