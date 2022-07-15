@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "105d93e5_1017b148",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-07-15T00:37:59Z",
+      "side": 1,
+      "message": "\u003e Patch Set 1:\n\u003e \n\u003e Something is fucky here. Doesn\u0027t want to unlock more than once, and it\u0027s not the drop Samsung fips change - that on top of a local 284 change I never got around to pushing is fine\n\nShipped 284. I\u0027m guessing the rand commits are the problem, and they show up in 285. Need to grind on that.",
+      "revId": "ae4a38a4a02255035460e27d9abd552f56ffdb68",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
