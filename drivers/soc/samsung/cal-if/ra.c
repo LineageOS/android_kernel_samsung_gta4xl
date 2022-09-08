@@ -1355,4 +1355,3 @@ int __init ra_init(void)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(ra_init);
