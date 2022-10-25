@@ -1,0 +1,90 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5b51d779_a516826d",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-10-25T17:03:57Z",
+      "side": 1,
+      "message": "Notes, still plan to accept defconfig changes for completeness",
+      "revId": "8d79d57fba3c545e7580353bb0958307effdcd39",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "3fc57b09_9d41a061",
+        "filename": "arch/arm64/configs/exynos9611-gta4xlwifi_defconfig",
+        "patchSetId": 3
+      },
+      "lineNbr": 456,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-10-25T17:03:57Z",
+      "side": 1,
+      "message": "No actual change, was default already",
+      "range": {
+        "startLine": 456,
+        "startChar": 0,
+        "endLine": 456,
+        "endChar": 30
+      },
+      "revId": "8d79d57fba3c545e7580353bb0958307effdcd39",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c91d96e8_c366be53",
+        "filename": "arch/arm64/configs/exynos9611-gta4xlwifi_defconfig",
+        "patchSetId": 3
+      },
+      "lineNbr": 560,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-10-25T17:03:57Z",
+      "side": 1,
+      "message": "No actual change, was default already",
+      "range": {
+        "startLine": 560,
+        "startChar": 0,
+        "endLine": 560,
+        "endChar": 40
+      },
+      "revId": "8d79d57fba3c545e7580353bb0958307effdcd39",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "b2544b60_0eea7548",
+        "filename": "arch/arm64/configs/exynos9611-gta4xlwifi_defconfig",
+        "patchSetId": 3
+      },
+      "lineNbr": 707,
+      "author": {
+        "id": 15173
+      },
+      "writtenOn": "2022-10-25T17:03:57Z",
+      "side": 1,
+      "message": "No actual change, was default already",
+      "range": {
+        "startLine": 707,
+        "startChar": 0,
+        "endLine": 707,
+        "endChar": 17
+      },
+      "revId": "8d79d57fba3c545e7580353bb0958307effdcd39",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
