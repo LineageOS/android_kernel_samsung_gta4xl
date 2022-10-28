@@ -4823,6 +4823,7 @@
 		samsung,tmu_default_trip_temp = <0x73>;
 		samsung,tmu_cal_type = <0x0>;
 		samsung,tmu_sensor_type = <0x0>;
+		thermal_status_level = <0x13880 0x14c08 0x15f90>;
 		linux,phandle = <0x73>;
 		phandle = <0x73>;
 	};
