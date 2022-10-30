@@ -5008,13 +5008,40 @@ static ssize_t sensitivity_mode_store(struct device *dev,
 	return count;
 }
 
+extern bool himax_disable_touch;
+static ssize_t disable_touch_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, 256, "%d", (int)himax_disable_touch);
+}
+
+static ssize_t disable_touch_store(struct device *dev,
+                                        struct device_attribute *attr,
+                                        const char *buf, size_t count)
+{
+	int disable;
+
+	if (kstrtoint(buf, 10, &disable) < 0) {
+		E("%s %s kstrtoint fail\n", HIMAX_LOG_TAG, __func__);
+		return count;
+	}
+
+        I("%s %sTurn %s touch", HIMAX_LOG_TAG, __func__, disable ? "off" : "on");
+	himax_disable_touch = disable;
+
+        return count;
+}
+
 static DEVICE_ATTR(sensitivity_mode, S_IRUGO | S_IWUSR | S_IWGRP,
 			sensitivity_mode_show, sensitivity_mode_store);
+static DEVICE_ATTR(disable_touch, S_IRUGO | S_IWUSR | S_IWGRP,
+			disable_touch_show, disable_touch_store);
 static DEVICE_ATTR(close_tsp_test, S_IRUGO, show_close_tsp_test, NULL);
 static DEVICE_ATTR(support_feature, 0444, read_support_feature, NULL);
 
 static struct attribute *sec_touch_factory_attributes[] = {
 	&dev_attr_sensitivity_mode.attr,
+	&dev_attr_disable_touch.attr,
 	&dev_attr_close_tsp_test.attr,
 	&dev_attr_support_feature.attr,
 	NULL,
