@@ -500,7 +500,7 @@ ifneq ($(KBUILD_SRC),)
 	    $(srctree) $(objtree) $(VERSION) $(PATCHLEVEL)
 endif
 
-PLATFORM_VERSION ?= 11.0
+PLATFORM_VERSION ?= 13.0
 @echo "PLATFORM_VERSION: $(PLATFORM_VERSION)"
 export PLATFORM_VERSION
 
