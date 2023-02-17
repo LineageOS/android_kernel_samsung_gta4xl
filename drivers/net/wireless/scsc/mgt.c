@@ -7733,7 +7733,6 @@ void slsi_collect_chipset_logs(struct work_struct *work)
 	void                    *buffer = NULL;
 	size_t size;
 	size_t bytes = 0;
-	int ret = 0;
 	char build_id_fw[128];
 	char build_id_drv[64];
 	size_t total_header;
