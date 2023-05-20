@@ -15,13 +15,12 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-#include <linux/rtmutex.h>
 #include "internal.h"
 #ifdef CONFIG_SEC_EXT
 #include <linux/sec_ext.h>
 #endif
 
-static DEFINE_RT_MUTEX(pmsg_lock);
+static DEFINE_MUTEX(pmsg_lock);
 
 static ssize_t write_pmsg(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
@@ -44,7 +43,7 @@ static ssize_t write_pmsg(struct file *file, const char __user *buf,
 	if (!access_ok(VERIFY_READ, buf, count))
 		return -EFAULT;
 
-	rt_mutex_lock(&pmsg_lock);
+	mutex_lock(&pmsg_lock);
 #ifdef CONFIG_SEC_EXT
 	if (count > 256)
 		sec_count = 256;
@@ -63,7 +62,7 @@ static ssize_t write_pmsg(struct file *file, const char __user *buf,
 	}
 #endif /* CONFIG_SEC_EXT */
 	ret = psinfo->write_user(&record, buf);
-	rt_mutex_unlock(&pmsg_lock);
+	mutex_unlock(&pmsg_lock);
 	return ret ? ret : count;
 }
 
