@@ -130,7 +130,7 @@ static int fmp_fips_hash_init(struct fmp_fips_info *info, struct hash_data *hdat
 		if (!hdata->sha)
 			return -ENOMEM;
 
-		ret = sha256_init(hdata->sha);
+		ret = fmp_sha256_init(hdata->sha);
 		break;
 	case 1:
 		hdata->hmac = kzalloc(sizeof(*hdata->hmac), GFP_KERNEL);
@@ -184,7 +184,7 @@ static ssize_t fmp_fips_hash_update(struct exynos_fmp *fmp,
 	}
 
 	if (hdata->sha != NULL)
-		ret = sha256_update(hdata->sha, buf, len);
+		ret = fmp_sha256_update(hdata->sha, buf, len);
 	else
 		ret = hmac_sha256_update(hdata->hmac, buf, len);
 
@@ -199,7 +199,7 @@ static int fmp_fips_hash_final(struct exynos_fmp *fmp,
 	int ret_crypto = 0; /* OK if zero */
 
 	if (hdata->sha != NULL)
-		ret_crypto = sha256_final(hdata->sha, output);
+		ret_crypto = fmp_sha256_final(hdata->sha, output);
 	else
 		ret_crypto = hmac_sha256_final(hdata->hmac, output);
 

@@ -27,6 +27,10 @@
 #include <soc/samsung/exynos-pmu.h>
 #include <soc/samsung/exynos-powermode.h>
 
+#ifdef CONFIG_SEC_PM_DEBUG
+#include <linux/interrupt.h>
+#endif /* CONFIG_SEC_PM_DEBUG */
+
 #define WAKEUP_STAT_EINT                (1 << 0)
 #define WAKEUP_STAT_RTC_ALARM           (1 << 1)
 /*
@@ -51,6 +55,28 @@ extern u32 exynos_eint_to_pin_num(int eint);
 struct wakeup_stat_name {
 	const char *name[32];
 };
+
+static void exynos_print_wakeup_sources(int irq, const char *name)
+{
+	struct irq_desc *desc;
+
+	if (irq < 0) {
+		if (name)
+			pr_info("PM: Resume caused by SYSINT: %s\n", name);
+
+		return;
+	}
+
+	desc = irq_to_desc(irq);
+
+	if (desc && desc->action && desc->action->name)
+		pr_info("PM: Resume caused by IRQ %d, %s\n", irq,
+				desc->action->name);
+	else
+		pr_info("PM: Resume caused by IRQ %d\n", irq);
+}
+#else
+static inline void exynos_print_wakeup_sources(int irq, const char *name) {}
 #endif
 
 struct exynos_pm_info {
@@ -114,10 +140,8 @@ static void exynos_show_wakeup_reason_eint(void)
 			gpio = exynos_eint_to_pin_num(i + bit);
 			irq = gpio_to_irq(gpio);
 
-#ifdef CONFIG_SUSPEND
-			log_wakeup_reason(irq);
-		//	update_wakeup_reason_stats(irq, i + bit);
-#endif
+			exynos_print_wakeup_sources(irq, NULL);
+
 			found = 1;
 		}
 	}
@@ -157,7 +181,7 @@ static void exynos_show_wakeup_reason_sysint(unsigned int stat,
 		if (!name)
 			continue;
 #ifdef CONFIG_SUSPEND
-		log_wakeup_reason_name(name);
+		exynos_print_wakeup_sources(-1, name);
 #endif
 	}
 }

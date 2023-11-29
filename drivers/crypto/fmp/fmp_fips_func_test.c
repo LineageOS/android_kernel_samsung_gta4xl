@@ -116,8 +116,7 @@ const struct exynos_fmp_fips_test_vops exynos_fmp_fips_test_ops = {
 	.aes		= fmp_func_test_aes,
 };
 
-int exynos_fmp_func_test_KAT_case(struct platform_device *pdev,
-				struct exynos_fmp *fmp)
+int exynos_fmp_func_test_KAT_case(struct exynos_fmp *fmp)
 {
 	int i, ret;
 	struct fmp_crypto_info data;
@@ -144,14 +143,12 @@ int exynos_fmp_func_test_KAT_case(struct platform_device *pdev,
 		if (ret) {
 			dev_err(dev, "FIPS FUNC : Fail to initialize fmp fips. ret(%d)",
 					ret);
-			exynos_fmp_fips_exit(fmp);
 			goto out;
 		}
 		dev_info(dev, "FIPS FUNC : (%d-1) Selftest done. FMP FIPS status : %s\n",
 				i + 1, in_fmp_fips_err() ? "FAILED" : "PASSED");
 
 		if (!strcmp("zeroization", get_fmp_fips_functest_mode())) {
-			exynos_fmp_fips_exit(fmp);
 			continue;
 		}
 
@@ -170,8 +167,6 @@ int exynos_fmp_func_test_KAT_case(struct platform_device *pdev,
 			dev_info(dev,
 				"FIPS FUNC : (%d-3) Fail FMP config as expected. ret(%d)\n",
 				i + 1, ret);
-
-		exynos_fmp_fips_exit(fmp);
 	}
 
 	set_fmp_fips_functest_KAT_mode(-1);

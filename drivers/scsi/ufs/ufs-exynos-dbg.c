@@ -44,7 +44,6 @@ static struct exynos_ufs_sfr_log ufs_log_sfr[] = {
 	{"UIC COMMAND ARG1"		,	REG_UIC_COMMAND_ARG_1,		0},
 	{"UIC COMMAND ARG2"		,	REG_UIC_COMMAND_ARG_2,		0},
 	{"UIC COMMAND ARG3"		,	REG_UIC_COMMAND_ARG_3,		0},
-	{"CCAP"				,	REG_CRYPTO_CAPABILITY,		0},
 
 	{"VS HCI SFR"			,	LOG_VS_HCI_SFR,			0},
 
@@ -332,7 +331,6 @@ static struct exynos_ufs_sfr_log ufs_show_sfr[] = {
 	{"UIC COMMAND ARG1"		,	REG_UIC_COMMAND_ARG_1,		0},
 	{"UIC COMMAND ARG2"		,	REG_UIC_COMMAND_ARG_2,		0},
 	{"UIC COMMAND ARG3"		,	REG_UIC_COMMAND_ARG_3,		0},
-	{"CCAP"				,	REG_CRYPTO_CAPABILITY,		0},
 
 	{"VS HCI SFR"			,	LOG_VS_HCI_SFR,			0},
 
@@ -865,7 +863,7 @@ void exynos_ufs_cmd_log_start(struct ufs_hba *hba, struct scsi_cmnd *cmd)
 		ufs_cmd_log.lba = lba;
 
 	ufs_cmd_log.sct = sct;
-	ufs_cmd_log.retries = cmd->allowed;
+	ufs_cmd_log.retries = cmd->retries;
 
 	exynos_ufs_putItem_start(&ufs_cmd_queue, &ufs_cmd_log);
 }

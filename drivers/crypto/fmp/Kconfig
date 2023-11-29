@@ -3,7 +3,7 @@
 #
 config EXYNOS_FMP
 	tristate "Samsung EXYNOS FMP driver"
-	depends on CRYPTO_DISKCIPHER && (SCSI_UFS_EXYNOS_FMP || MMC_DW_EXYNOS_FMP)
+	depends on SCSI_UFS_CRYPTO || MMC_CRYPTO
 	help
 	  Say yes here to build support for FMP (Flash Memory Protector)
 	  to encrypt and decrypt userdata using inline H/W crypto module.
@@ -25,7 +25,7 @@ config EXYNOS_FMP_FIPS
 choice
 	prompt "Option for self-test failure"
 	depends on EXYNOS_FMP_FIPS
-	default NODE_FOR_SELFTEST_FAIL
+	default PANIC_FOR_SELFTEST_FAIL
 
 config NODE_FOR_SELFTEST_FAIL
 	bool "Set fips fmp node when self-test fails"
