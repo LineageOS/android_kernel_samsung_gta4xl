@@ -2542,8 +2542,8 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 	addr[3] = idx >> 8;
 	addr[4] = idx;
 	memcpy(data->addresses[0].addr, addr, ETH_ALEN);
-	memcpy(data->addresses[1].addr, addr, ETH_ALEN);
 	data->addresses[1].addr[0] |= 0x40;
+	memcpy(data->addresses[1].addr, addr, ETH_ALEN);
 	hw->wiphy->n_addresses = 2;
 	hw->wiphy->addresses = data->addresses;
 
